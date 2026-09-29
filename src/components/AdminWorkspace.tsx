@@ -159,7 +159,6 @@ export const AdminWorkspace: React.FC<{
   })();
 
   // Contextual sub-tabs inside each of the 7 clean areas
-  const [showOverviewAnalytics, setShowOverviewAnalytics] = useState(false);
   const [productTab, setProductTab] = useState<'CATALOGO' | 'COMBOS' | 'COMPLIANCE'>('CATALOGO');
   const [salesTab, setSalesTab] = useState<'PEDIDOS' | 'OFERTAS' | 'CUPONS_CAMPANHAS'>('OFERTAS');
   const [customerTab, setCustomerTab] = useState<'COMPRADORES' | 'LEADS'>('COMPRADORES');
@@ -477,352 +476,232 @@ export const AdminWorkspace: React.FC<{
     econConfig.defaultCacTarget;
   const simMarginPct = netAfterDiscount > 0 ? (simContribution / netAfterDiscount) * 100 : -100;
 
+  const totalAttentionCount =
+    awaitingPreparationOrders.length + exceptionOrders.length + pendingComplianceOffers.length;
+  const deliveredOrdersCount = orders.filter((o) => o.operationalStatus === 'delivered').length;
+
+  const getOrderQuickStatus = (ord: Order): { label: string; tone: 'emerald' | 'cyan' | 'amber' | 'danger' | 'lime' | 'slate' } => {
+    if (ord.financialStatus === 'pending') return { label: 'Pendente', tone: 'amber' };
+    if (ord.financialStatus === 'refunded') return { label: 'Reembolsado', tone: 'slate' };
+    if (ord.financialStatus === 'cancelled') return { label: 'Cancelado', tone: 'danger' };
+    if (ord.operationalStatus === 'delivered') return { label: 'Pago · Entregue', tone: 'emerald' };
+    if (ord.operationalStatus === 'shipped' || ord.operationalStatus === 'in_transit') {
+      return { label: 'Pago · Enviando', tone: 'cyan' };
+    }
+    if (ord.operationalStatus === 'exception') return { label: 'Pago · Problema', tone: 'danger' };
+    return { label: 'Pago · Preparando', tone: 'lime' };
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* ==================================================================== */}
       {/* 1. VISÃO GERAL — Enxuta, comercial e focada no que importa */}
       {/* ==================================================================== */}
       {activeArea === 'VISAO_GERAL' && (
-        <div className="space-y-6">
+        <div className="space-y-8">
+          {/* Cabeçalho limpo com apenas 1 ação primária */}
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h1 className="text-xl font-extrabold font-display text-[var(--text-primary)]">
-                Visão Geral da Operação
+              <h1 className="text-2xl font-extrabold font-display tracking-tight text-[var(--text-primary)]">
+                Visão geral
               </h1>
-              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                Acompanhe vendas, valores a receber, pendências operacionais e pedidos recentes.
+              <p className="text-sm text-[var(--text-secondary)] mt-1">
+                Acompanhe o que está acontecendo na sua operação.
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setShowOverviewAnalytics(!showOverviewAnalytics)}
-              >
-                {showOverviewAnalytics ? 'Ocultar Relatório de Margem' : 'Relatório de Margem & Funil'}
-              </Button>
-              <Button
-                size="sm"
-                icon={<Plus className="w-4 h-4" />}
-                onClick={() => {
-                  setSection('VENDAS');
-                  setSalesTab('OFERTAS');
-                  setOfferModalOpen(true);
-                }}
-              >
-                Nova Oferta
-              </Button>
-            </div>
+            <Button
+              size="sm"
+              icon={<Plus className="w-4 h-4" />}
+              onClick={() => {
+                setSection('VENDAS');
+                setSalesTab('OFERTAS');
+                setOfferModalOpen(true);
+              }}
+            >
+              Nova oferta
+            </Button>
           </div>
 
-          {/* 4 KPIs Essenciais: Quanto vendemos? Quantos pedidos? Quanto a receber? O que precisa de atenção? */}
+          {/* 4 KPIs curtos e diretos: Vendas, Pedidos, A Receber, Atenção */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <KPI
-              label="Quanto Vendemos (Aprovado)"
+              label="Vendas"
               value={`R$ ${grossSales.toFixed(2)}`}
-              subvalue={`Ticket médio: R$ ${avgTicket.toFixed(2)}`}
+              subvalue={`${approvedOrders.length} pagos · Ticket médio R$ ${avgTicket.toFixed(2)}`}
               accent="emerald"
               icon={<DollarSign className="w-4 h-4" />}
             />
             <KPI
-              label="Total de Pedidos"
-              value={orders.length}
-              subvalue={`${approvedOrders.length} pagos · ${
-                orders.filter((o) => o.operationalStatus === 'delivered').length
-              } entregues`}
+              label="Pedidos"
+              value={`${orders.length} pedidos`}
+              subvalue={`${approvedOrders.length} pagos · ${deliveredOrdersCount} entregues`}
               accent="lime"
               icon={<Package className="w-4 h-4" />}
             />
             <KPI
-              label="Valores a Receber / Compensar"
+              label="A Receber"
               value={`R$ ${receivablePending.toFixed(2)}`}
-              subvalue={`${pendingPaymentOrders.length} pagamentos aguardando confirmação`}
+              subvalue={`${pendingPaymentOrders.length} pendentes`}
               accent="cyan"
               icon={<CreditCard className="w-4 h-4" />}
             />
             <KPI
-              label="Precisa de Atenção Agora"
-              value={awaitingPreparationOrders.length + exceptionOrders.length}
+              label="Atenção"
+              value={totalAttentionCount}
               subvalue={`${awaitingPreparationOrders.length} para enviar · ${exceptionOrders.length} com problema`}
               accent={exceptionOrders.length > 0 ? 'danger' : 'amber'}
               icon={<AlertTriangle className="w-4 h-4" />}
             />
           </div>
 
-          {/* Bloco de Alertas & Pendências + Pedidos Recentes */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* O que precisa da nossa atenção */}
-            <div className="lg:col-span-5">
-              <Card
-                title="Alertas & Pendências Operacionais"
-                subtitle="Ações rápidas para destravar pedidos e vendas do dia"
-              >
-                <div className="space-y-3">
-                  <div className="p-3.5 rounded-xl bg-[var(--bg-subtle)]/70 border border-[var(--border-subtle)] flex items-center justify-between gap-3">
-                    <div className="flex items-start gap-3">
-                      <span className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0 mt-0.5">
-                        <PackageCheck className="w-4 h-4" />
+          {/* 2. Bloco enxuto: Precisa da sua atenção */}
+          <Card title="Precisa da sua atenção">
+            {totalAttentionCount === 0 ? (
+              <div className="py-3 text-sm text-[var(--text-secondary)] flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                <span>Nenhuma pendência operacional no momento.</span>
+              </div>
+            ) : (
+              <div className="divide-y divide-[var(--border-subtle)] -my-2">
+                {awaitingPreparationOrders.length > 0 && (
+                  <div className="py-3.5 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 text-sm text-[var(--text-primary)]">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                      <span>
+                        <strong className="font-semibold">{awaitingPreparationOrders.length}</strong>{' '}
+                        {awaitingPreparationOrders.length === 1
+                          ? 'pedido aguardando envio'
+                          : 'pedidos aguardando envio'}
                       </span>
-                      <div>
-                        <div className="text-xs font-bold text-[var(--text-primary)]">
-                          {awaitingPreparationOrders.length} pedido(s) pagos aguardando envio
-                        </div>
-                        <div className="text-[11px] text-[var(--text-secondary)]">
-                          Prontos para separação e emissão de etiqueta
-                        </div>
-                      </div>
                     </div>
-                    <Button
-                      size="xs"
-                      variant="secondary"
+                    <button
+                      type="button"
                       onClick={() => {
                         setSection('ENTREGAS');
                         setDeliveryFilter('AGUARDANDO');
                       }}
+                      className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1 cursor-pointer shrink-0"
                     >
-                      Enviar
-                    </Button>
+                      <span>Ver pedidos</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
                   </div>
+                )}
 
-                  {exceptionOrders.length > 0 && (
-                    <div className="p-3.5 rounded-xl bg-rose-500/[0.06] border border-rose-500/20 flex items-center justify-between gap-3">
-                      <div className="flex items-start gap-3">
-                        <span className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0 mt-0.5">
-                          <AlertTriangle className="w-4 h-4" />
-                        </span>
-                        <div>
-                          <div className="text-xs font-bold text-rose-600 dark:text-rose-400">
-                            {exceptionOrders.length} entrega(s) com exceção na transportadora
-                          </div>
-                          <div className="text-[11px] text-[var(--text-secondary)]">
-                            Ex: {exceptionOrders[0].orderNumber} ({exceptionOrders[0].exceptionReason})
-                          </div>
-                        </div>
-                      </div>
-                      <Button
-                        size="xs"
-                        variant="danger"
-                        onClick={() => {
-                          setSection('ENTREGAS');
-                          setDeliveryFilter('PROBLEMAS');
-                        }}
-                      >
-                        Resolver
-                      </Button>
-                    </div>
-                  )}
-
-                  {pendingComplianceOffers.length > 0 && (
-                    <div className="p-3.5 rounded-xl bg-[var(--bg-subtle)]/70 border border-[var(--border-subtle)] flex items-center justify-between gap-3">
-                      <div className="flex items-start gap-3">
-                        <span className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
-                          <ClipboardCheck className="w-4 h-4" />
-                        </span>
-                        <div>
-                          <div className="text-xs font-bold text-[var(--text-primary)]">
-                            {pendingComplianceOffers.length} oferta(s) aguardando liberação
-                          </div>
-                          <div className="text-[11px] text-[var(--text-secondary)]">
-                            Conferir checklist do produto antes de ativar link
-                          </div>
-                        </div>
-                      </div>
-                      <Button
-                        size="xs"
-                        variant="secondary"
-                        onClick={() => {
-                          setSection('PRODUTOS');
-                          setProductTab('COMPLIANCE');
-                        }}
-                      >
-                        Revisar
-                      </Button>
-                    </div>
-                  )}
-
-                  <div className="p-3.5 rounded-xl bg-[var(--bg-subtle)]/70 border border-[var(--border-subtle)] flex items-center justify-between gap-3">
-                    <div className="flex items-start gap-3">
-                      <span className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0 mt-0.5">
-                        <Sparkles className="w-4 h-4" />
+                {exceptionOrders.length > 0 && (
+                  <div className="py-3.5 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 text-sm text-[var(--text-primary)]">
+                      <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                      <span>
+                        <strong className="font-semibold text-rose-600 dark:text-rose-400">
+                          {exceptionOrders.length}
+                        </strong>{' '}
+                        {exceptionOrders.length === 1
+                          ? 'entrega com problema'
+                          : 'entregas com problema'}
                       </span>
-                      <div>
-                        <div className="text-xs font-bold text-[var(--text-primary)]">
-                          {offers.filter((o) => o.status === 'ACTIVE').length} ofertas ativas vendendo hoje
-                        </div>
-                        <div className="text-[11px] text-[var(--text-secondary)]">
-                          Links públicos prontos para os vendedores
-                        </div>
-                      </div>
                     </div>
-                    <Button
-                      size="xs"
-                      variant="secondary"
+                    <button
+                      type="button"
                       onClick={() => {
-                        setSection('VENDAS');
-                        setSalesTab('OFERTAS');
+                        setSection('ENTREGAS');
+                        setDeliveryFilter('PROBLEMAS');
                       }}
+                      className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline inline-flex items-center gap-1 cursor-pointer shrink-0"
                     >
-                      Ver Ofertas
-                    </Button>
+                      <span>Resolver</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-                </div>
-              </Card>
-            </div>
+                )}
 
-            {/* Quais foram os pedidos recentes? */}
-            <div className="lg:col-span-7">
-              <Card
-                title="Pedidos Recentes"
-                subtitle="Clique em qualquer pedido para abrir os detalhes ou avançar o envio"
-                action={
-                  <Button
-                    size="xs"
-                    variant="secondary"
-                    onClick={() => {
-                      setSection('VENDAS');
-                      setSalesTab('PEDIDOS');
-                    }}
-                  >
-                    Ver Todos os Pedidos
-                  </Button>
-                }
+                {pendingComplianceOffers.length > 0 && (
+                  <div className="py-3.5 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 text-sm text-[var(--text-primary)]">
+                      <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
+                      <span>
+                        <strong className="font-semibold">{pendingComplianceOffers.length}</strong>{' '}
+                        {pendingComplianceOffers.length === 1
+                          ? 'oferta aguardando aprovação'
+                          : 'ofertas aguardando aprovação'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSection('PRODUTOS');
+                        setProductTab('COMPLIANCE');
+                      }}
+                      className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1 cursor-pointer shrink-0"
+                    >
+                      <span>Revisar</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
+
+          {/* 3. Pedidos recentes (4 colunas limpas: Pedido, Cliente, Status, Valor) */}
+          <Card
+            title="Pedidos recentes"
+            action={
+              <button
+                type="button"
+                onClick={() => {
+                  setSection('VENDAS');
+                  setSalesTab('PEDIDOS');
+                }}
+                className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
               >
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b border-[var(--border-subtle)] text-[var(--text-secondary)]">
-                        <th className="py-2.5 px-2 font-semibold">Pedido</th>
-                        <th className="py-2.5 px-2 font-semibold">Cliente</th>
-                        <th className="py-2.5 px-2 font-semibold">Oferta</th>
-                        <th className="py-2.5 px-2 font-semibold">Pagamento</th>
-                        <th className="py-2.5 px-2 font-semibold">Entrega</th>
-                        <th className="py-2.5 px-2 text-right font-semibold">Valor</th>
+                <span>Ver todos</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            }
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--border-subtle)] text-xs text-[var(--text-secondary)]">
+                    <th className="py-3 px-3 font-semibold">Pedido</th>
+                    <th className="py-3 px-3 font-semibold">Cliente</th>
+                    <th className="py-3 px-3 font-semibold">Status</th>
+                    <th className="py-3 px-3 text-right font-semibold">Valor</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border-subtle)]">
+                  {orders.slice(0, 6).map((ord) => {
+                    const quickStatus = getOrderQuickStatus(ord);
+                    return (
+                      <tr
+                        key={ord.id}
+                        onClick={() => {
+                          setSelectedOrder(ord);
+                          setSection('VENDAS');
+                          setSalesTab('PEDIDOS');
+                        }}
+                        className="hover:bg-[var(--bg-subtle)]/60 cursor-pointer transition-colors"
+                      >
+                        <td className="py-3.5 px-3 font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                          {ord.orderNumber}
+                        </td>
+                        <td className="py-3.5 px-3 font-medium text-[var(--text-primary)]">
+                          {ord.customerSnapshot.name}
+                        </td>
+                        <td className="py-3.5 px-3">
+                          <Badge tone={quickStatus.tone}>{quickStatus.label}</Badge>
+                        </td>
+                        <td className="py-3.5 px-3 text-right font-mono font-bold text-[var(--text-primary)] tabular-nums">
+                          R$ {ord.total.toFixed(2)}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[var(--border-subtle)]">
-                      {orders.slice(0, 6).map((ord) => (
-                        <tr
-                          key={ord.id}
-                          onClick={() => {
-                            setSelectedOrder(ord);
-                            setSection('VENDAS');
-                            setSalesTab('PEDIDOS');
-                          }}
-                          className="hover:bg-[var(--bg-subtle)]/60 cursor-pointer transition-colors"
-                        >
-                          <td className="py-3 px-2 font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                            {ord.orderNumber}
-                          </td>
-                          <td className="py-3 px-2 font-medium text-[var(--text-primary)]">
-                            {ord.customerSnapshot.name}
-                          </td>
-                          <td className="py-3 px-2 text-[var(--text-secondary)]">
-                            {ord.offerName.slice(0, 26)}...
-                          </td>
-                          <td className="py-3 px-2">
-                            <StatusBadge status={ord.financialStatus} />
-                          </td>
-                          <td className="py-3 px-2">
-                            <StatusBadge status={ord.operationalStatus} />
-                          </td>
-                          <td className="py-3 px-2 text-right font-mono font-bold text-[var(--text-primary)] tabular-nums">
-                            R$ {ord.total.toFixed(2)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          </div>
-
-          {/* Relatório Opcional de Economia Unitária & Funil (incorporado ao Dashboard quando solicitado) */}
-          {showOverviewAnalytics && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
-              <Card
-                title="Funil Comercial de Conversão"
-                subtitle="Visitas nos links (/o/...) → Checkout → Pedidos Pagos → Entregues"
-              >
-                <BarChartSimple
-                  data={[
-                    { label: 'Visitas nos Links de Oferta', value: 575 },
-                    { label: 'Checkouts Iniciados', value: 138 },
-                    { label: 'Pedidos Gerados', value: 89 },
-                    { label: 'Pagamentos Confirmados', value: 76 },
-                    { label: 'Pedidos Entregues', value: 64 },
-                    { label: 'Recompras Realizadas', value: 22 },
-                  ]}
-                />
-              </Card>
-
-              <Card
-                title="Simulador Rápido de Margem por Venda"
-                subtitle="Receita líquida após impostos, gateway, comissão, custo do pote e frete"
-              >
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <Input
-                    label="Preço da Oferta (R$)"
-                    type="number"
-                    value={simRevenue}
-                    onChange={(e) => setSimRevenue(Number(e.target.value))}
-                  />
-                  <Input
-                    label="Desconto Cupom (R$)"
-                    type="number"
-                    value={simDiscount}
-                    onChange={(e) => setSimDiscount(Number(e.target.value))}
-                  />
-                  <Input
-                    label="Custo dos Potes (R$)"
-                    type="number"
-                    value={simProdCost}
-                    onChange={(e) => setSimProdCost(Number(e.target.value))}
-                  />
-                  <Input
-                    label="Frete Subsidiado (R$)"
-                    type="number"
-                    value={simShipSubsidy}
-                    onChange={(e) => setSimShipSubsidy(Number(e.target.value))}
-                  />
-                </div>
-                <div className="bg-[var(--bg-subtle)]/70 border border-[var(--border-subtle)] rounded-xl p-4 space-y-1.5 text-xs font-mono">
-                  <div className="flex justify-between">
-                    <span>Receita Líquida (após cupom):</span>
-                    <strong>R$ {netAfterDiscount.toFixed(2)}</strong>
-                  </div>
-                  <div className="flex justify-between text-[var(--text-secondary)]">
-                    <span>Impostos + Gateway + Comissão ({econConfig.defaultCommissionPercent}%):</span>
-                    <span>- R$ {(simTaxes + simGateway + simCommission).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-[var(--text-secondary)]">
-                    <span>Produto + Embalagem + Frete + CAC:</span>
-                    <span>
-                      - R${' '}
-                      {(
-                        simProdCost +
-                        econConfig.packagingAndOpCostPerOrder +
-                        simShipSubsidy +
-                        econConfig.defaultCacTarget
-                      ).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="pt-2 border-t border-[var(--border-subtle)] flex justify-between text-sm font-bold">
-                    <span>Lucro / Margem de Contribuição:</span>
-                    <span
-                      className={
-                        simMarginPct >= econConfig.minContributionMarginPercent
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : 'text-rose-500'
-                      }
-                    >
-                      R$ {simContribution.toFixed(2)} ({simMarginPct.toFixed(1)}%)
-                    </span>
-                  </div>
-                </div>
-              </Card>
-            </div>
-          )}
+          </Card>
         </div>
       )}
 
