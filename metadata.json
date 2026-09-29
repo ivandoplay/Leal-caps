@@ -1,0 +1,6 @@
+{
+  "name": "LEAL CAPS — Private Sales & Fulfillment Infrastructure",
+  "description": "Plataforma full-stack privada de vendas diretas, motor comercial de ofertas, compliance regulatório, checkout mobile-first, pagamentos, fulfillment logístico, CRM e auditoria.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

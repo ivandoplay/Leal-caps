@@ -1,0 +1,66 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Platform operator (ADMIN, VENDEDOR, FULFILLMENT)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "VENDEDOR", "FULFILLMENT"] },
+        "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE"] },
+        "twoFactorEnabled": { "type": "boolean" },
+        "sellerCode": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "role", "status"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Core sales order with decoupled financial and operational statuses",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "customerId": { "type": "string" },
+        "sellerId": { "type": "string" },
+        "offerId": { "type": "string" },
+        "total": { "type": "number" },
+        "financialStatus": { "type": "string" },
+        "operationalStatus": { "type": "string" },
+        "consolidatedStatus": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "orderNumber", "total", "financialStatus", "operationalStatus"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable governance and audit trail event",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "action": { "type": "string" },
+        "entity": { "type": "string" },
+        "entityId": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "action", "entity", "entityId", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Platform users and roles"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Synchronized order state"
+    },
+    "/audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Immutable audit logs"
+    }
+  }
+}
