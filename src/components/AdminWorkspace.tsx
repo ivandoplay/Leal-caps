@@ -1,11 +1,7 @@
 import React, { useState } from 'react';
 import {
-  Activity,
-  AlertOctagon,
+  AlertTriangle,
   ArrowRight,
-  BarChart3,
-  Boxes,
-  Calculator,
   CheckCircle2,
   ClipboardCheck,
   Copy,
@@ -13,18 +9,13 @@ import {
   DollarSign,
   ExternalLink,
   FileText,
-  Filter,
-  FolderKanban,
-  KeyRound,
   Layers,
   Link2,
   Lock,
   Package,
   PackageCheck,
-  Percent,
   Plus,
-  RefreshCcw,
-  ShieldAlert,
+  Search,
   ShieldCheck,
   Sliders,
   Sparkles,
@@ -77,20 +68,25 @@ import {
 } from '../types/domain.ts';
 
 export type AdminSection =
-  | 'DASHBOARD'
+  | 'VISAO_GERAL'
   | 'PRODUTOS'
+  | 'VENDAS'
+  | 'CLIENTES'
+  | 'ENTREGAS'
+  | 'VENDEDORES'
+  | 'CONFIGURACOES'
+  // Legacy aliases mapped seamlessly to the 7 core areas
+  | 'DASHBOARD'
   | 'DOCUMENTACAO'
   | 'OFERTAS'
   | 'COMBOS'
   | 'CUPONS'
   | 'CAMPANHAS'
   | 'LEADS'
-  | 'CLIENTES'
   | 'PEDIDOS'
   | 'PAGAMENTOS'
   | 'LOGISTICA'
   | 'FULFILLMENT'
-  | 'VENDEDORES'
   | 'COMISSOES'
   | 'CRM'
   | 'AUTOMACOES'
@@ -100,8 +96,7 @@ export type AdminSection =
   | 'USUARIOS'
   | 'PERMISSOES'
   | 'AUDITORIA'
-  | 'INTEGRACOES'
-  | 'CONFIGURACOES';
+  | 'INTEGRACOES';
 
 export const AdminWorkspace: React.FC<{
   section: AdminSection;
@@ -131,7 +126,6 @@ export const AdminWorkspace: React.FC<{
 }> = ({
   section,
   setSection,
-  user,
   token,
   products,
   offers,
@@ -142,44 +136,63 @@ export const AdminWorkspace: React.FC<{
   leads,
   orders,
   payments,
-  shipments,
   commissions,
   automationRules,
   complianceReviews,
   unitEconomicsConfig,
   auditLogs,
   users,
-  privacyRequests,
   onRefresh,
   onOpenPublicLink,
   onNotify,
 }) => {
-  // Dashboard Filters
-  const [filterCampaign, setFilterCampaign] = useState('ALL');
-  const [filterSeller, setFilterSeller] = useState('ALL');
-  const [filterStatus, setFilterStatus] = useState('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
+  // Normalize any legacy section into the 7 primary navigation areas
+  const activeArea = (() => {
+    if (['VISAO_GERAL', 'DASHBOARD', 'ANALYTICS', 'ECONOMIA'].includes(section)) return 'VISAO_GERAL';
+    if (['PRODUTOS', 'DOCUMENTACAO', 'COMBOS', 'COMPLIANCE'].includes(section)) return 'PRODUTOS';
+    if (['VENDAS', 'OFERTAS', 'CUPONS', 'CAMPANHAS', 'PEDIDOS', 'PAGAMENTOS'].includes(section))
+      return 'VENDAS';
+    if (['CLIENTES', 'CRM', 'LEADS'].includes(section)) return 'CLIENTES';
+    if (['ENTREGAS', 'FULFILLMENT', 'LOGISTICA'].includes(section)) return 'ENTREGAS';
+    if (['VENDEDORES', 'COMISSOES'].includes(section)) return 'VENDEDORES';
+    return 'CONFIGURACOES';
+  })();
 
-  // Selected Order for Details Drawer/View
+  // Contextual sub-tabs inside each of the 7 clean areas
+  const [showOverviewAnalytics, setShowOverviewAnalytics] = useState(false);
+  const [productTab, setProductTab] = useState<'CATALOGO' | 'COMBOS' | 'COMPLIANCE'>('CATALOGO');
+  const [salesTab, setSalesTab] = useState<'PEDIDOS' | 'OFERTAS' | 'CUPONS_CAMPANHAS'>('OFERTAS');
+  const [customerTab, setCustomerTab] = useState<'COMPRADORES' | 'LEADS'>('COMPRADORES');
+  const [deliveryFilter, setDeliveryFilter] = useState<
+    'ALL' | 'AGUARDANDO' | 'ENVIADOS' | 'PROBLEMAS' | 'ENTREGUES'
+  >('ALL');
+  const [settingsTab, setSettingsTab] = useState<
+    'REGRAS' | 'USUARIOS' | 'INTEGRACOES' | 'AUTOMACOES' | 'AUDITORIA'
+  >('REGRAS');
+
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(orders[0] || null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
+    customers[0]?.id || null
+  );
 
   // Product Create/Edit Modal
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [prodForm, setProdForm] = useState({
-    sku: 'LC-META-60C',
-    internalName: '[DEMO] Composto Metabólico Inositol + Cromo 60 Caps',
-    commercialName: 'Leal MetaControl 60 Cápsulas [DEMO]',
+    sku: 'LC-META-100C',
+    internalName: 'Composto Metabólico Inositol + Cromo 100 Caps',
+    commercialName: 'Leal MetaControl 100 Cápsulas',
     category: 'Emagrecimento' as ProductCategory,
     description: 'Suplemento alimentar em cápsulas com Picolinato de Cromo e Inositol.',
     composition: 'Inositol (500mg), Picolinato de Cromo (250mcg), Bisglicinato de Magnésio (150mg).',
-    presentation: 'Frasco âmbar 60 cápsulas',
-    unitQuantity: 60,
+    presentation: 'Frasco âmbar 100 cápsulas',
+    unitQuantity: 100,
     batchNumber: 'LT-2026-10M',
     expiryDate: '2028-10-30',
-    unitCost: 25.5,
+    unitCost: 15.0,
     stockQuantity: 500,
-    regulatoryInfo: 'Dispensado de registro conforme RDC ANVISA 240/2018.',
+    regulatoryInfo: 'Suplemento alimentar notificado conforme exigência ANVISA.',
     warnings: 'ESTE PRODUTO NÃO É UM MEDICAMENTO. NÃO EXCEDER A RECOMENDAÇÃO DIÁRIA.',
     usageInstructions: 'Ingerir 2 cápsulas ao dia.',
   });
@@ -188,7 +201,7 @@ export const AdminWorkspace: React.FC<{
   const [offerModalOpen, setOfferModalOpen] = useState(false);
   const [offerForm, setOfferForm] = useState({
     code: 'K2META',
-    name: 'Kit 2x Leal LipoTherm Pro — Condição Especial [DEMO]',
+    name: 'Kit 2x Leal LipoTherm Pro — Condição Especial',
     offerType: 'KIT_2',
     productId: products[0]?.id || 'prd_01',
     quantity: 2,
@@ -200,7 +213,7 @@ export const AdminWorkspace: React.FC<{
     shippingSubsidy: 18.9,
     sellerId: '',
     campaignId: campaigns[0]?.id || 'cmp_01',
-    complianceStatus: 'DRAFT' as ComplianceState,
+    complianceStatus: 'APPROVED' as ComplianceState,
   });
 
   // Coupon Modal
@@ -213,27 +226,34 @@ export const AdminWorkspace: React.FC<{
     maxUsesPerCustomer: 1,
   });
 
-  // Economics Config State
+  // Economics Config & Simulator State
   const [econConfig, setEconConfig] = useState<UnitEconomicsConfig>(unitEconomicsConfig);
-  const [simRevenue, setSimRevenue] = useState(299.9);
-  const [simDiscount, setSimDiscount] = useState(30.0);
-  const [simProdCost, setSimProdCost] = useState(49.0);
+  const [simRevenue, setSimRevenue] = useState(279.9);
+  const [simDiscount, setSimDiscount] = useState(27.99);
+  const [simProdCost, setSimProdCost] = useState(30.0);
   const [simShipSubsidy, setSimShipSubsidy] = useState(18.9);
 
-  // Filtered Orders for Dashboard
-  const filteredOrders = orders.filter((o) => {
-    if (filterCampaign !== 'ALL' && o.campaignId !== filterCampaign) return false;
-    if (filterSeller !== 'ALL' && o.sellerId !== filterSeller) return false;
-    if (filterStatus !== 'ALL' && o.financialStatus !== filterStatus && o.operationalStatus !== filterStatus)
-      return false;
-    return true;
-  });
-
-  const approvedOrders = filteredOrders.filter((o) => o.financialStatus === 'approved');
+  // ============================================================================
+  // CORE METRICS FOR LEAN DASHBOARD
+  // ============================================================================
+  const approvedOrders = orders.filter((o) => o.financialStatus === 'approved');
+  const pendingPaymentOrders = orders.filter((o) => o.financialStatus === 'pending');
   const grossSales = approvedOrders.reduce((acc, o) => acc + o.total, 0);
+  const receivablePending = pendingPaymentOrders.reduce((acc, o) => acc + o.total, 0);
   const avgTicket = approvedOrders.length > 0 ? grossSales / approvedOrders.length : 0;
 
-  // API Handlers
+  // Actionable Alerts & Bottlenecks
+  const awaitingPreparationOrders = orders.filter(
+    (o) =>
+      o.financialStatus === 'approved' &&
+      ['waiting', 'picking', 'packing', 'ready_to_ship'].includes(o.operationalStatus)
+  );
+  const exceptionOrders = orders.filter((o) => o.operationalStatus === 'exception');
+  const pendingComplianceOffers = offers.filter((o) => o.complianceStatus !== 'APPROVED');
+
+  // ============================================================================
+  // PRESERVED API HANDLERS (100% Backend Rules Intact)
+  // ============================================================================
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     const url = editingProduct ? `/api/products/${editingProduct.id}` : '/api/products';
@@ -249,8 +269,8 @@ export const AdminWorkspace: React.FC<{
     } else {
       onNotify(
         editingProduct
-          ? `Produto ${data.product.sku} atualizado e auditado!`
-          : `Produto ${data.product.sku} criado com sucesso!`,
+          ? `Produto ${data.product.sku} atualizado!`
+          : `Produto ${data.product.sku} cadastrado com sucesso!`,
         'success'
       );
       setProductModalOpen(false);
@@ -311,7 +331,7 @@ export const AdminWorkspace: React.FC<{
     if (!res.ok) {
       onNotify(data.error || 'Oferta bloqueada pelo motor comercial.', 'error');
     } else {
-      onNotify(`Oferta /o/${data.offer.code} criada e validada economicamente!`, 'success');
+      onNotify(`Oferta /o/${data.offer.code} criada com sucesso!`, 'success');
       setOfferModalOpen(false);
       onRefresh();
     }
@@ -326,7 +346,7 @@ export const AdminWorkspace: React.FC<{
     if (!res.ok) {
       onNotify(data.error || 'Publicação bloqueada pelo Compliance Gate.', 'error');
     } else {
-      onNotify(`Oferta ${data.offer.code} publicada com sucesso!`, 'success');
+      onNotify(`Oferta ${data.offer.code} ativada e publicada!`, 'success');
       onRefresh();
     }
   };
@@ -384,7 +404,7 @@ export const AdminWorkspace: React.FC<{
     if (!res.ok) {
       onNotify(data.error || 'Erro ao reembolsar.', 'error');
     } else {
-      onNotify(`Pagamento reembolsado e registrado no AuditLog!`, 'info');
+      onNotify(`Pagamento reembolsado com sucesso!`, 'info');
       onRefresh();
     }
   };
@@ -410,7 +430,7 @@ export const AdminWorkspace: React.FC<{
     if (!res.ok) {
       onNotify(data.error || 'Bloqueado pelo Compliance Gate.', 'error');
     } else {
-      onNotify(`Revisão de compliance atualizada (${data.review.status}).`, 'success');
+      onNotify(`Compliance atualizado (${data.review.status}).`, 'success');
       onRefresh();
     }
   };
@@ -423,7 +443,7 @@ export const AdminWorkspace: React.FC<{
       body: JSON.stringify(econConfig),
     });
     if (res.ok) {
-      onNotify('Regras comerciais e limites de economia unitária salvos e auditados!', 'success');
+      onNotify('Regras comerciais e limites de margem salvos!', 'success');
       onRefresh();
     }
   };
@@ -432,15 +452,15 @@ export const AdminWorkspace: React.FC<{
     const res = await fetch(`/api/privacy/anonymize/${customerId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ purpose: 'Direito de eliminação/anonimização Art. 18 LGPD' }),
+      body: JSON.stringify({ purpose: 'Solicitação de anonimização LGPD' }),
     });
     if (res.ok) {
-      onNotify('Titular anonimizado com sucesso conforme LGPD!', 'info');
+      onNotify('Dados do cliente anonimizados conforme LGPD.', 'info');
       onRefresh();
     }
   };
 
-  // Live Waterfall Unit Economics Calculation
+  // Unit Economics Simulator Math
   const netAfterDiscount = Math.max(0, simRevenue - simDiscount);
   const simTaxes = (netAfterDiscount * econConfig.taxRatePercent) / 100;
   const simGateway = (netAfterDiscount * econConfig.gatewayFeePercent) / 100 + 0.99;
@@ -460,161 +480,209 @@ export const AdminWorkspace: React.FC<{
   return (
     <div className="space-y-6">
       {/* ==================================================================== */}
-      {/* 1. DASHBOARD OPERACIONAL COMPLETO (Seção 5) */}
+      {/* 1. VISÃO GERAL — Enxuta, comercial e focada no que importa */}
       {/* ==================================================================== */}
-      {section === 'DASHBOARD' && (
+      {activeArea === 'VISAO_GERAL' && (
         <div className="space-y-6">
-          {/* Multi-Dimension Filters */}
-          <div className="bg-[#11141B] border border-[#232938] rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#A3E635]">
-              <Filter className="w-4 h-4" />
-              <span>Filtros Operacionais & Atribuição</span>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-extrabold font-display text-[var(--text-primary)]">
+                Visão Geral da Operação
+              </h1>
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                Acompanhe vendas, valores a receber, pendências operacionais e pedidos recentes.
+              </p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full lg:w-auto">
-              <Select
-                value={filterCampaign}
-                onChange={(e) => setFilterCampaign(e.target.value)}
-                options={[
-                  { value: 'ALL', label: 'Todas as Campanhas' },
-                  ...campaigns.map((c) => ({ value: c.id, label: c.name })),
-                ]}
-              />
-              <Select
-                value={filterSeller}
-                onChange={(e) => setFilterSeller(e.target.value)}
-                options={[
-                  { value: 'ALL', label: 'Todos os Vendedores' },
-                  { value: 'usr_seller_01', label: 'Camila Rocha (Sênior)' },
-                  { value: 'usr_seller_02', label: 'Rafael Mendes (Inside)' },
-                ]}
-              />
-              <Select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                options={[
-                  { value: 'ALL', label: 'Todos os Status' },
-                  { value: 'approved', label: 'Financeiro: Aprovado' },
-                  { value: 'pending', label: 'Financeiro: Pendente' },
-                  { value: 'waiting', label: 'Logística: Fila Separação' },
-                  { value: 'shipped', label: 'Logística: Enviado' },
-                  { value: 'delivered', label: 'Logística: Entregue' },
-                  { value: 'exception', label: 'Logística: Exceção' },
-                ]}
-              />
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowOverviewAnalytics(!showOverviewAnalytics)}
+              >
+                {showOverviewAnalytics ? 'Ocultar Relatório de Margem' : 'Relatório de Margem & Funil'}
+              </Button>
+              <Button
+                size="sm"
+                icon={<Plus className="w-4 h-4" />}
+                onClick={() => {
+                  setSection('VENDAS');
+                  setSalesTab('OFERTAS');
+                  setOfferModalOpen(true);
+                }}
+              >
+                Nova Oferta
+              </Button>
             </div>
           </div>
 
-          {/* Primary Commercial & Financial KPIs */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+          {/* 4 KPIs Essenciais: Quanto vendemos? Quantos pedidos? Quanto a receber? O que precisa de atenção? */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <KPI
-              label="Vendas Aprovadas"
+              label="Quanto Vendemos (Aprovado)"
               value={`R$ ${grossSales.toFixed(2)}`}
-              subvalue={`${approvedOrders.length} pedidos pagos`}
-              accent="lime"
-            />
-            <KPI
-              label="Total Pedidos"
-              value={filteredOrders.length}
-              subvalue="Conversão funil: 13.2%"
-              accent="cyan"
-            />
-            <KPI
-              label="Ticket Médio"
-              value={`R$ ${avgTicket.toFixed(2)}`}
-              subvalue="Kits 2x e 3x: 74% mix"
+              subvalue={`Ticket médio: R$ ${avgTicket.toFixed(2)}`}
               accent="emerald"
+              icon={<DollarSign className="w-4 h-4" />}
             />
             <KPI
-              label="CAC Médio / ROAS"
-              value="R$ 36,40"
-              subvalue="ROAS Global: 4.85x"
+              label="Total de Pedidos"
+              value={orders.length}
+              subvalue={`${approvedOrders.length} pagos · ${
+                orders.filter((o) => o.operationalStatus === 'delivered').length
+              } entregues`}
               accent="lime"
+              icon={<Package className="w-4 h-4" />}
             />
             <KPI
-              label="Margem Contrib."
-              value="34.2%"
-              subvalue="LTV 90D: R$ 412,50"
+              label="Valores a Receber / Compensar"
+              value={`R$ ${receivablePending.toFixed(2)}`}
+              subvalue={`${pendingPaymentOrders.length} pagamentos aguardando confirmação`}
               accent="cyan"
+              icon={<CreditCard className="w-4 h-4" />}
             />
             <KPI
-              label="Refund / Chargeback"
-              value="1.2% / 0.3%"
-              subvalue="SLA Expedição: 14.5h"
-              accent="amber"
+              label="Precisa de Atenção Agora"
+              value={awaitingPreparationOrders.length + exceptionOrders.length}
+              subvalue={`${awaitingPreparationOrders.length} para enviar · ${exceptionOrders.length} com problema`}
+              accent={exceptionOrders.length > 0 ? 'danger' : 'amber'}
+              icon={<AlertTriangle className="w-4 h-4" />}
             />
           </div>
 
-          {/* Operational & Logistics Queue KPIs */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
-            <KPI
-              label="Pagamentos Pendentes"
-              value={orders.filter((o) => o.financialStatus === 'pending').length}
-              subvalue="Aguardando Webhook"
-              accent="amber"
-            />
-            <KPI
-              label="Pedidos Pendentes"
-              value={
-                orders.filter((o) => o.financialStatus === 'approved' && o.operationalStatus === 'waiting')
-                  .length
-              }
-              subvalue="Elegíveis no WMS"
-              accent="lime"
-            />
-            <KPI
-              label="Em Preparação"
-              value={
-                orders.filter((o) => ['picking', 'packing', 'ready_to_ship'].includes(o.operationalStatus))
-                  .length
-              }
-              subvalue="Separação + Embalagem"
-              accent="cyan"
-            />
-            <KPI
-              label="Pedidos Enviados"
-              value={orders.filter((o) => o.operationalStatus === 'shipped').length}
-              subvalue="Em trânsito transportadora"
-              accent="cyan"
-            />
-            <KPI
-              label="Pedidos Entregues"
-              value={orders.filter((o) => o.operationalStatus === 'delivered').length}
-              subvalue="Jornada Recompra ativa"
-              accent="emerald"
-            />
-            <KPI
-              label="Exceções Logísticas"
-              value={orders.filter((o) => o.operationalStatus === 'exception').length}
-              subvalue="Endereço / Atraso"
-              accent="danger"
-            />
-          </div>
-
-          {/* Funnel & Recent Orders */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <Card
-              title="Funil Ponta a Ponta da Operação"
-              subtitle="Aquisição → Oferta → Checkout → Pagamento → Entrega → Recompra"
-            >
-              <BarChartSimple
-                data={[
-                  { label: '1. Visitas em Links (/o/...)', value: 575, color: 'bg-[#06B6D4]' },
-                  { label: '2. Ofertas Visualizadas', value: 391, color: 'bg-[#06B6D4]' },
-                  { label: '3. Checkouts Iniciados', value: 138, color: 'bg-[#A3E635]' },
-                  { label: '4. Pagamentos Criados', value: 89, color: 'bg-[#A3E635]' },
-                  { label: '5. Pedidos Aprovados (Webhook)', value: 76, color: 'bg-[#10B981]' },
-                  { label: '6. Pedidos Entregues', value: 64, color: 'bg-[#10B981]' },
-                  { label: '7. Recompras Realizadas', value: 22, color: 'bg-[#A3E635]' },
-                ]}
-              />
-            </Card>
-
-            <div className="lg:col-span-2">
+          {/* Bloco de Alertas & Pendências + Pedidos Recentes */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* O que precisa da nossa atenção */}
+            <div className="lg:col-span-5">
               <Card
-                title="Últimos Pedidos & Status Independentes"
-                subtitle="Visão desacoplada entre Status Financeiro (Gateway) e Status Operacional (WMS)"
+                title="Alertas & Pendências Operacionais"
+                subtitle="Ações rápidas para destravar pedidos e vendas do dia"
+              >
+                <div className="space-y-3">
+                  <div className="p-3.5 rounded-xl bg-[var(--bg-subtle)]/70 border border-[var(--border-subtle)] flex items-center justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <span className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0 mt-0.5">
+                        <PackageCheck className="w-4 h-4" />
+                      </span>
+                      <div>
+                        <div className="text-xs font-bold text-[var(--text-primary)]">
+                          {awaitingPreparationOrders.length} pedido(s) pagos aguardando envio
+                        </div>
+                        <div className="text-[11px] text-[var(--text-secondary)]">
+                          Prontos para separação e emissão de etiqueta
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      size="xs"
+                      variant="secondary"
+                      onClick={() => {
+                        setSection('ENTREGAS');
+                        setDeliveryFilter('AGUARDANDO');
+                      }}
+                    >
+                      Enviar
+                    </Button>
+                  </div>
+
+                  {exceptionOrders.length > 0 && (
+                    <div className="p-3.5 rounded-xl bg-rose-500/[0.06] border border-rose-500/20 flex items-center justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <span className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0 mt-0.5">
+                          <AlertTriangle className="w-4 h-4" />
+                        </span>
+                        <div>
+                          <div className="text-xs font-bold text-rose-600 dark:text-rose-400">
+                            {exceptionOrders.length} entrega(s) com exceção na transportadora
+                          </div>
+                          <div className="text-[11px] text-[var(--text-secondary)]">
+                            Ex: {exceptionOrders[0].orderNumber} ({exceptionOrders[0].exceptionReason})
+                          </div>
+                        </div>
+                      </div>
+                      <Button
+                        size="xs"
+                        variant="danger"
+                        onClick={() => {
+                          setSection('ENTREGAS');
+                          setDeliveryFilter('PROBLEMAS');
+                        }}
+                      >
+                        Resolver
+                      </Button>
+                    </div>
+                  )}
+
+                  {pendingComplianceOffers.length > 0 && (
+                    <div className="p-3.5 rounded-xl bg-[var(--bg-subtle)]/70 border border-[var(--border-subtle)] flex items-center justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <span className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
+                          <ClipboardCheck className="w-4 h-4" />
+                        </span>
+                        <div>
+                          <div className="text-xs font-bold text-[var(--text-primary)]">
+                            {pendingComplianceOffers.length} oferta(s) aguardando liberação
+                          </div>
+                          <div className="text-[11px] text-[var(--text-secondary)]">
+                            Conferir checklist do produto antes de ativar link
+                          </div>
+                        </div>
+                      </div>
+                      <Button
+                        size="xs"
+                        variant="secondary"
+                        onClick={() => {
+                          setSection('PRODUTOS');
+                          setProductTab('COMPLIANCE');
+                        }}
+                      >
+                        Revisar
+                      </Button>
+                    </div>
+                  )}
+
+                  <div className="p-3.5 rounded-xl bg-[var(--bg-subtle)]/70 border border-[var(--border-subtle)] flex items-center justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <span className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0 mt-0.5">
+                        <Sparkles className="w-4 h-4" />
+                      </span>
+                      <div>
+                        <div className="text-xs font-bold text-[var(--text-primary)]">
+                          {offers.filter((o) => o.status === 'ACTIVE').length} ofertas ativas vendendo hoje
+                        </div>
+                        <div className="text-[11px] text-[var(--text-secondary)]">
+                          Links públicos prontos para os vendedores
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      size="xs"
+                      variant="secondary"
+                      onClick={() => {
+                        setSection('VENDAS');
+                        setSalesTab('OFERTAS');
+                      }}
+                    >
+                      Ver Ofertas
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            {/* Quais foram os pedidos recentes? */}
+            <div className="lg:col-span-7">
+              <Card
+                title="Pedidos Recentes"
+                subtitle="Clique em qualquer pedido para abrir os detalhes ou avançar o envio"
                 action={
-                  <Button size="xs" variant="secondary" onClick={() => setSection('PEDIDOS')}>
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    onClick={() => {
+                      setSection('VENDAS');
+                      setSalesTab('PEDIDOS');
+                    }}
+                  >
                     Ver Todos os Pedidos
                   </Button>
                 }
@@ -622,37 +690,42 @@ export const AdminWorkspace: React.FC<{
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="border-b border-[#232938] text-[#94A3B8] uppercase font-mono">
-                        <th className="py-2.5 px-2">Pedido</th>
-                        <th className="py-2.5 px-2">Cliente</th>
-                        <th className="py-2.5 px-2">Oferta</th>
-                        <th className="py-2.5 px-2">Financeiro</th>
-                        <th className="py-2.5 px-2">Operacional</th>
-                        <th className="py-2.5 px-2 text-right">Total</th>
+                      <tr className="border-b border-[var(--border-subtle)] text-[var(--text-secondary)]">
+                        <th className="py-2.5 px-2 font-semibold">Pedido</th>
+                        <th className="py-2.5 px-2 font-semibold">Cliente</th>
+                        <th className="py-2.5 px-2 font-semibold">Oferta</th>
+                        <th className="py-2.5 px-2 font-semibold">Pagamento</th>
+                        <th className="py-2.5 px-2 font-semibold">Entrega</th>
+                        <th className="py-2.5 px-2 text-right font-semibold">Valor</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#1E2330]">
-                      {filteredOrders.map((ord) => (
+                    <tbody className="divide-y divide-[var(--border-subtle)]">
+                      {orders.slice(0, 6).map((ord) => (
                         <tr
                           key={ord.id}
                           onClick={() => {
                             setSelectedOrder(ord);
-                            setSection('PEDIDOS');
+                            setSection('VENDAS');
+                            setSalesTab('PEDIDOS');
                           }}
-                          className="hover:bg-[#171B24] cursor-pointer"
+                          className="hover:bg-[var(--bg-subtle)]/60 cursor-pointer transition-colors"
                         >
-                          <td className="py-3 px-2 font-mono font-bold text-[#A3E635]">
+                          <td className="py-3 px-2 font-mono font-bold text-indigo-600 dark:text-indigo-400">
                             {ord.orderNumber}
                           </td>
-                          <td className="py-3 px-2 text-[#F3F5F8]">{ord.customerSnapshot.name}</td>
-                          <td className="py-3 px-2 text-[#94A3B8]">{ord.offerName.slice(0, 28)}...</td>
+                          <td className="py-3 px-2 font-medium text-[var(--text-primary)]">
+                            {ord.customerSnapshot.name}
+                          </td>
+                          <td className="py-3 px-2 text-[var(--text-secondary)]">
+                            {ord.offerName.slice(0, 26)}...
+                          </td>
                           <td className="py-3 px-2">
                             <StatusBadge status={ord.financialStatus} />
                           </td>
                           <td className="py-3 px-2">
                             <StatusBadge status={ord.operationalStatus} />
                           </td>
-                          <td className="py-3 px-2 text-right font-mono font-bold text-[#F3F5F8]">
+                          <td className="py-3 px-2 text-right font-mono font-bold text-[var(--text-primary)] tabular-nums">
                             R$ {ord.total.toFixed(2)}
                           </td>
                         </tr>
@@ -663,657 +736,1054 @@ export const AdminWorkspace: React.FC<{
               </Card>
             </div>
           </div>
+
+          {/* Relatório Opcional de Economia Unitária & Funil (incorporado ao Dashboard quando solicitado) */}
+          {showOverviewAnalytics && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
+              <Card
+                title="Funil Comercial de Conversão"
+                subtitle="Visitas nos links (/o/...) → Checkout → Pedidos Pagos → Entregues"
+              >
+                <BarChartSimple
+                  data={[
+                    { label: 'Visitas nos Links de Oferta', value: 575 },
+                    { label: 'Checkouts Iniciados', value: 138 },
+                    { label: 'Pedidos Gerados', value: 89 },
+                    { label: 'Pagamentos Confirmados', value: 76 },
+                    { label: 'Pedidos Entregues', value: 64 },
+                    { label: 'Recompras Realizadas', value: 22 },
+                  ]}
+                />
+              </Card>
+
+              <Card
+                title="Simulador Rápido de Margem por Venda"
+                subtitle="Receita líquida após impostos, gateway, comissão, custo do pote e frete"
+              >
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <Input
+                    label="Preço da Oferta (R$)"
+                    type="number"
+                    value={simRevenue}
+                    onChange={(e) => setSimRevenue(Number(e.target.value))}
+                  />
+                  <Input
+                    label="Desconto Cupom (R$)"
+                    type="number"
+                    value={simDiscount}
+                    onChange={(e) => setSimDiscount(Number(e.target.value))}
+                  />
+                  <Input
+                    label="Custo dos Potes (R$)"
+                    type="number"
+                    value={simProdCost}
+                    onChange={(e) => setSimProdCost(Number(e.target.value))}
+                  />
+                  <Input
+                    label="Frete Subsidiado (R$)"
+                    type="number"
+                    value={simShipSubsidy}
+                    onChange={(e) => setSimShipSubsidy(Number(e.target.value))}
+                  />
+                </div>
+                <div className="bg-[var(--bg-subtle)]/70 border border-[var(--border-subtle)] rounded-xl p-4 space-y-1.5 text-xs font-mono">
+                  <div className="flex justify-between">
+                    <span>Receita Líquida (após cupom):</span>
+                    <strong>R$ {netAfterDiscount.toFixed(2)}</strong>
+                  </div>
+                  <div className="flex justify-between text-[var(--text-secondary)]">
+                    <span>Impostos + Gateway + Comissão ({econConfig.defaultCommissionPercent}%):</span>
+                    <span>- R$ {(simTaxes + simGateway + simCommission).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-[var(--text-secondary)]">
+                    <span>Produto + Embalagem + Frete + CAC:</span>
+                    <span>
+                      - R${' '}
+                      {(
+                        simProdCost +
+                        econConfig.packagingAndOpCostPerOrder +
+                        simShipSubsidy +
+                        econConfig.defaultCacTarget
+                      ).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="pt-2 border-t border-[var(--border-subtle)] flex justify-between text-sm font-bold">
+                    <span>Lucro / Margem de Contribuição:</span>
+                    <span
+                      className={
+                        simMarginPct >= econConfig.minContributionMarginPercent
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-rose-500'
+                      }
+                    >
+                      R$ {simContribution.toFixed(2)} ({simMarginPct.toFixed(1)}%)
+                    </span>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          )}
         </div>
       )}
 
       {/* ==================================================================== */}
-      {/* 2. CATÁLOGO DE PRODUTOS & DOCUMENTAÇÃO (Seções 2 e 6) */}
+      {/* 2. PRODUTOS — Produtos + Combos + Documentação/Compliance no mesmo lugar */}
       {/* ==================================================================== */}
-      {(section === 'PRODUTOS' || section === 'DOCUMENTACAO') && (
+      {activeArea === 'PRODUTOS' && (
         <div className="space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <SearchBar
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Pesquisar por SKU, nome interno, nome comercial ou lote..."
-            />
-            <div className="flex gap-2">
+            <div>
+              <h1 className="text-xl font-extrabold font-display text-[var(--text-primary)]">
+                Produtos, Combos & Conformidade
+              </h1>
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                Gerencie os itens físicos em estoque, kits/combos e documentação regulatória de cada produto.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center bg-[var(--bg-subtle)] p-1 rounded-xl border border-[var(--border-subtle)]">
+                <button
+                  onClick={() => setProductTab('CATALOGO')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                    productTab === 'CATALOGO'
+                      ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  Produtos ({products.length})
+                </button>
+                <button
+                  onClick={() => setProductTab('COMBOS')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                    productTab === 'COMBOS'
+                      ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  Kits & Combos
+                </button>
+                <button
+                  onClick={() => setProductTab('COMPLIANCE')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                    productTab === 'COMPLIANCE'
+                      ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  Aprovação & Rótulos ({complianceReviews.length})
+                </button>
+              </div>
+
               <Button
+                size="sm"
                 icon={<Plus className="w-4 h-4" />}
                 onClick={() => {
                   setEditingProduct(null);
                   setProductModalOpen(true);
                 }}
               >
-                Novo Produto Físico (SKU)
+                Novo Produto
               </Button>
             </div>
           </div>
 
-          <div className="bg-[#11141B] border border-[#F59E0B]/30 rounded-xl p-4 text-xs text-[#94A3B8] space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span>
-                <strong className="text-[#F59E0B]">Regra Regulatória ANVISA (Pós-Set/2024 &amp; 2026):</strong> Os nomes abaixo são <strong>taxonomia interna do negócio</strong> e nunca devem ser usados automaticamente como alegações publicitárias (perda de peso, desempenho sexual, sintomas de menopausa, ansiedade ou ganho muscular). Padrão base MVP: <strong>100 cápsulas/frasco</strong> • <strong>~R$ 15,00 custo bruto do frasco</strong>.
-              </span>
-              <Badge tone="amber">10 CATEGORIAS INTERNAS × USO INTERNO</Badge>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1">
-              {[
-                { cat: 'Emagrecimento', uso: 'Composição corporal' },
-                { cat: 'Pele, cabelos e unhas', uso: 'Beleza' },
-                { cat: 'Queima de gordura', uso: 'Composição corporal' },
-                { cat: 'Celulite', uso: 'Estética' },
-                { cat: 'Massa magra', uso: 'Composição corporal' },
-                { cat: 'Articulações', uso: 'Suporte / mobilidade' },
-                { cat: 'Ansiedade', uso: 'Categoria de interesse' },
-                { cat: 'Endometriose', uso: 'Categoria de interesse' },
-                { cat: 'Menopausa', uso: 'Categoria de interesse' },
-                { cat: 'Libido', uso: 'Categoria de interesse' },
-              ].map((item) => (
-                <div key={item.cat} className="bg-[#090B0E] border border-[#232938] rounded-lg p-2">
-                  <div className="font-bold text-[#F3F5F8] text-[11px]">{item.cat}</div>
-                  <div className="text-[10px] font-mono text-[#06B6D4]">Uso interno: {item.uso}</div>
-                </div>
-              ))}
-            </div>
-          </div>
+          {productTab === 'CATALOGO' && (
+            <div className="space-y-4">
+              <SearchBar
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder="Buscar produto por nome, SKU ou categoria..."
+              />
 
-          <div className="grid grid-cols-1 gap-4">
-            {products
-              .filter(
-                (p) =>
-                  p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                  p.commercialName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                  p.category.toLowerCase().includes(searchQuery.toLowerCase())
-              )
-              .map((prod) => (
-                <Card key={prod.id}>
-                  <div className="flex flex-col lg:flex-row justify-between gap-6">
-                    <div className="flex gap-4">
-                      <img
-                        src={
-                          prod.images[0]?.url ||
-                          'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=400&q=80'
-                        }
-                        alt={prod.commercialName}
-                        className="w-24 h-24 rounded-xl object-cover border border-[#232938] shrink-0"
-                      />
-                      <div className="space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-xs font-bold text-[#A3E635] bg-[#A3E635]/10 px-2 py-0.5 rounded border border-[#A3E635]/30">
-                            SKU: {prod.sku}
-                          </span>
-                          <Badge tone="cyan">Taxonomia: {prod.category}</Badge>
-                          <StatusBadge status={prod.status} />
-                          <StatusBadge status={prod.complianceStatus} />
-                        </div>
-                        <h3 className="text-base font-bold font-display text-[#F3F5F8]">
-                          {prod.commercialName}
-                        </h3>
-                        <p className="text-xs text-[#64748B] font-mono">
-                          Nome Interno: {prod.internalName}
-                        </p>
-                        <p className="text-xs text-[#94A3B8]">{prod.description}</p>
-                        <div className="flex flex-wrap gap-4 pt-1 text-xs font-mono text-[#94A3B8]">
-                          <span>Lote: {prod.batchNumber}</span>
-                          <span>Validade: {prod.expiryDate}</span>
-                          <span>Apresentação: {prod.presentation}</span>
-                          <span className="text-[#A3E635]">CMV Unitário: R$ {prod.unitCost.toFixed(2)}</span>
-                          <span>Estoque CD: {prod.stockQuantity} un</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex lg:flex-col justify-between items-end gap-2 shrink-0">
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="xs"
-                          variant="secondary"
-                          onClick={() => {
-                            setEditingProduct(prod);
-                            setProdForm({
-                              sku: prod.sku,
-                              internalName: prod.internalName,
-                              commercialName: prod.commercialName,
-                              category: prod.category,
-                              description: prod.description,
-                              composition: prod.composition,
-                              presentation: prod.presentation,
-                              unitQuantity: prod.unitQuantity,
-                              batchNumber: prod.batchNumber,
-                              expiryDate: prod.expiryDate,
-                              unitCost: prod.unitCost,
-                              stockQuantity: prod.stockQuantity,
-                              regulatoryInfo: prod.regulatoryInfo,
-                              warnings: prod.warnings,
-                              usageInstructions: prod.usageInstructions,
-                            });
-                            setProductModalOpen(true);
-                          }}
-                        >
-                          Editar SKU
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant="secondary"
-                          icon={<Copy className="w-3.5 h-3.5" />}
-                          onClick={() => handleDuplicateProduct(prod.id)}
-                        >
-                          Duplicar
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant={prod.status === 'ACTIVE' ? 'danger' : 'primary'}
-                          onClick={() => handleToggleProductStatus(prod)}
-                        >
-                          {prod.status === 'ACTIVE' ? 'Desativar' : 'Ativar'}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Regulatory Claims & Documentation Sub-panel */}
-                  <div className="mt-4 pt-4 border-t border-[#232938] grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                    <div className="bg-[#090B0E] p-3 rounded-lg border border-[#232938]">
-                      <div className="font-bold text-[#06B6D4] mb-1.5 uppercase">
-                        Claims Aprovados (ANVISA IN 28/2018) & Rotulagem
-                      </div>
-                      {prod.approvedClaims.map((c) => (
-                        <div key={c.id} className="text-[#F3F5F8] mb-1">
-                          • "{c.claimText}" <span className="text-[#64748B]">({c.regulatoryBasis})</span>
-                        </div>
-                      ))}
-                      <div className="text-[11px] text-[#64748B] mt-2">
-                        <strong>Modo de uso:</strong> {prod.usageInstructions}
-                      </div>
-                    </div>
-
-                    <div className="bg-[#090B0E] p-3 rounded-lg border border-[#232938]">
-                      <div className="font-bold text-[#A3E635] mb-1.5 uppercase">
-                        Dossiê & Documentação Regulatória Anexada ({prod.documents.length})
-                      </div>
-                      {prod.documents.length === 0 ? (
-                        <p className="text-[#EF4444]">Sem documentação técnica vinculada.</p>
-                      ) : (
-                        prod.documents.map((doc) => (
-                          <div
-                            key={doc.id}
-                            className="flex items-center justify-between py-1 border-b border-[#1E2330] last:border-0"
-                          >
-                            <span className="text-[#F3F5F8]">{doc.title}</span>
-                            <Badge tone="emerald">{doc.version}</Badge>
+              <div className="grid grid-cols-1 gap-4">
+                {products
+                  .filter(
+                    (p) =>
+                      p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      p.commercialName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      p.category.toLowerCase().includes(searchQuery.toLowerCase())
+                  )
+                  .map((prod) => (
+                    <Card key={prod.id}>
+                      <div className="flex flex-col lg:flex-row justify-between gap-6">
+                        <div className="flex gap-4">
+                          <img
+                            src={
+                              prod.images[0]?.url ||
+                              '/src/assets/images/product_lipotherm_pro_1790723418728.jpg'
+                            }
+                            alt={prod.commercialName}
+                            referrerPolicy="no-referrer"
+                            className="w-24 h-24 rounded-xl object-cover border border-[var(--border-subtle)] shrink-0"
+                          />
+                          <div className="space-y-1.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge tone="lime">SKU: {prod.sku}</Badge>
+                              <Badge tone="cyan">{prod.category}</Badge>
+                              <StatusBadge status={prod.status} />
+                            </div>
+                            <h3 className="text-base font-bold text-[var(--text-primary)]">
+                              {prod.commercialName}
+                            </h3>
+                            <p className="text-xs text-[var(--text-secondary)]">{prod.description}</p>
+                            <div className="flex flex-wrap gap-4 pt-1 text-xs font-mono text-[var(--text-secondary)]">
+                              <span>Apresentação: {prod.presentation}</span>
+                              <span>Lote: {prod.batchNumber}</span>
+                              <span>Validade: {prod.expiryDate}</span>
+                              <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                                Custo: R$ {prod.unitCost.toFixed(2)}
+                              </span>
+                              <span>Estoque: {prod.stockQuantity} un</span>
+                            </div>
                           </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </Card>
-              ))}
-          </div>
-        </div>
-      )}
+                        </div>
 
-      {/* ==================================================================== */}
-      {/* 3. MOTOR DE OFERTAS (OFFER ENGINE) & COMBOS (Seções 7 e 8) */}
-      {/* ==================================================================== */}
-      {(section === 'OFERTAS' || section === 'COMBOS') && (
-        <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-bold font-display text-[#F3F5F8]">
-                Offer Engine — Condições Comerciais & Links Rastreáveis
-              </h2>
-              <p className="text-xs text-[#94A3B8]">
-                Suporta 1 Unidade, Kit 2, Kit 3+ e Combos Multi-SKU. Toda oferta valida margem mínima e passa pelo Compliance Gate antes de publicar.
-              </p>
+                        <div className="flex lg:flex-col justify-between items-end gap-2 shrink-0">
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="xs"
+                              variant="secondary"
+                              onClick={() => {
+                                setEditingProduct(prod);
+                                setProdForm({
+                                  sku: prod.sku,
+                                  internalName: prod.internalName,
+                                  commercialName: prod.commercialName,
+                                  category: prod.category,
+                                  description: prod.description,
+                                  composition: prod.composition,
+                                  presentation: prod.presentation,
+                                  unitQuantity: prod.unitQuantity,
+                                  batchNumber: prod.batchNumber,
+                                  expiryDate: prod.expiryDate,
+                                  unitCost: prod.unitCost,
+                                  stockQuantity: prod.stockQuantity,
+                                  regulatoryInfo: prod.regulatoryInfo,
+                                  warnings: prod.warnings,
+                                  usageInstructions: prod.usageInstructions,
+                                });
+                                setProductModalOpen(true);
+                              }}
+                            >
+                              Editar Produto / Docs
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="secondary"
+                              icon={<Copy className="w-3.5 h-3.5" />}
+                              onClick={() => handleDuplicateProduct(prod.id)}
+                            >
+                              Duplicar
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant={prod.status === 'ACTIVE' ? 'danger' : 'primary'}
+                              onClick={() => handleToggleProductStatus(prod)}
+                            >
+                              {prod.status === 'ACTIVE' ? 'Desativar' : 'Ativar'}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Documentação e Claims contextualizados diretamente no Produto */}
+                      <div className="mt-4 pt-4 border-t border-[var(--border-subtle)] grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                        <div className="bg-[var(--bg-subtle)]/50 p-3.5 rounded-xl border border-[var(--border-subtle)]">
+                          <div className="font-bold text-[var(--text-primary)] mb-1.5">
+                            Alegações Autorizadas no Rótulo & Modo de Uso
+                          </div>
+                          {prod.approvedClaims.map((c) => (
+                            <div key={c.id} className="text-[var(--text-secondary)] mb-1">
+                              • {c.claimText}
+                            </div>
+                          ))}
+                          <div className="text-[11px] text-[var(--text-muted)] mt-2">
+                            <strong>Uso recomendado:</strong> {prod.usageInstructions}
+                          </div>
+                        </div>
+
+                        <div className="bg-[var(--bg-subtle)]/50 p-3.5 rounded-xl border border-[var(--border-subtle)]">
+                          <div className="font-bold text-[var(--text-primary)] mb-1.5">
+                            Documentação & Laudos Anexados ({prod.documents.length})
+                          </div>
+                          {prod.documents.length === 0 ? (
+                            <p className="text-amber-600 dark:text-amber-400">
+                              Nenhum documento anexado ainda. Clique em "Editar Produto / Docs" para anexar.
+                            </p>
+                          ) : (
+                            prod.documents.map((doc) => (
+                              <div
+                                key={doc.id}
+                                className="flex items-center justify-between py-1.5 border-b border-[var(--border-subtle)] last:border-0"
+                              >
+                                <span className="text-[var(--text-secondary)]">{doc.title}</span>
+                                <Badge tone="emerald">{doc.version}</Badge>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+              </div>
             </div>
-            <Button icon={<Plus className="w-4 h-4" />} onClick={() => setOfferModalOpen(true)}>
-              Criar Nova Oferta / Combo
-            </Button>
-          </div>
+          )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {offers
-              .filter((o) => (section === 'COMBOS' ? o.offerType !== '1_UNIT' : true))
-              .map((off) => (
-                <Card
-                  key={off.id}
-                  title={off.name}
-                  subtitle={`Link Público: /o/${off.code} • Limite: ${off.usageCount}/${off.usageLimit} usos`}
-                  action={<StatusBadge status={off.status} />}
-                >
-                  <div className="space-y-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone="lime">/o/{off.code}</Badge>
-                      <Badge tone="cyan">{off.offerType}</Badge>
-                      <StatusBadge status={off.complianceStatus} />
-                      {off.freeShipping && <Badge tone="emerald">FRETE GRÁTIS SUBSIDIADO</Badge>}
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-3 bg-[#090B0E] p-3.5 rounded-xl border border-[#232938] font-mono text-xs">
-                      <div>
-                        <span className="text-[#64748B] block">Preço Regular</span>
-                        <span className="line-through text-[#94A3B8]">
-                          R$ {off.regularPrice.toFixed(2)}
-                        </span>
+          {productTab === 'COMBOS' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {offers
+                .filter((o) => o.offerType !== '1_UNIT')
+                .map((off) => (
+                  <Card
+                    key={off.id}
+                    title={off.name}
+                    subtitle={`Código: /o/${off.code} · Tipo: ${off.offerType}`}
+                    action={<StatusBadge status={off.status} />}
+                  >
+                    <div className="space-y-3 text-xs">
+                      <div className="bg-[var(--bg-subtle)]/60 p-3 rounded-xl border border-[var(--border-subtle)] flex justify-between items-center">
+                        <div>
+                          <span className="text-[var(--text-muted)] block">Composição do Kit/Combo:</span>
+                          <strong className="text-[var(--text-primary)]">
+                            {off.items.map((i) => `${i.quantity}x ${i.productName}`).join(' + ')}
+                          </strong>
+                        </div>
+                        <div className="text-right font-mono">
+                          <span className="line-through text-[var(--text-muted)] block">
+                            R$ {off.regularPrice.toFixed(2)}
+                          </span>
+                          <strong className="text-base text-indigo-600 dark:text-indigo-400">
+                            R$ {off.promotionalPrice.toFixed(2)}
+                          </strong>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-[#64748B] block">Preço Oferta</span>
-                        <strong className="text-base text-[#A3E635]">
-                          R$ {off.promotionalPrice.toFixed(2)}
-                        </strong>
-                      </div>
-                      <div>
-                        <span className="text-[#64748B] block">Desconto</span>
-                        <strong className="text-[#10B981]">{off.discountPercent}% OFF</strong>
-                      </div>
-                    </div>
-
-                    <div className="text-xs text-[#94A3B8] space-y-1">
-                      <div>
-                        <strong>Itens físicos vinculados:</strong>{' '}
-                        {off.items.map((i) => `${i.quantity}x ${i.sku}`).join(' + ')}
-                      </div>
-                      <div>
-                        <strong>Regras de Elegibilidade:</strong> {off.eligibilityRules}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap justify-between items-center gap-2 pt-3 border-t border-[#232938]">
-                      <div className="text-[11px] font-mono text-[#A3E635] truncate max-w-xs">
-                        {`${window.location.origin}/o/${off.code}`}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {off.status !== 'ACTIVE' && (
-                          <Button
-                            size="xs"
-                            variant="primary"
-                            onClick={() => handlePublishOffer(off.id)}
-                          >
-                            Publicar Oferta (Compliance Gate)
-                          </Button>
-                        )}
+                      <div className="flex justify-end gap-2">
                         <Button
                           size="xs"
                           variant="secondary"
-                          icon={<Copy className="w-3.5 h-3.5" />}
-                          onClick={() => {
-                            const url = `${window.location.origin}/o/${off.code}`;
-                            navigator.clipboard?.writeText(url);
-                            onNotify(`Link copiado: ${url}`, 'success');
-                          }}
-                        >
-                          Copiar Link
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant="primary"
-                          icon={<ExternalLink className="w-3.5 h-3.5" />}
                           onClick={() => onOpenPublicLink(off.code)}
                         >
-                          Abrir Oferta (/o/{off.code})
+                          Ver no Checkout (/o/{off.code})
                         </Button>
                       </div>
                     </div>
-                  </div>
-                </Card>
-              ))}
-          </div>
-        </div>
-      )}
-
-      {/* ==================================================================== */}
-      {/* 4. CUPONS & CAMPANHAS (Seções 2 e 9) */}
-      {/* ==================================================================== */}
-      {section === 'CUPONS' && (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-bold font-display">Gestão de Cupons & Regras de Uso</h2>
-              <p className="text-xs text-[#94A3B8]">
-                Controle de desconto percentual/fixo, limite global, limite por CPF e restrição por vendedor/oferta.
-              </p>
-            </div>
-            <Button icon={<Plus className="w-4 h-4" />} onClick={() => setCouponModalOpen(true)}>
-              Novo Cupom
-            </Button>
-          </div>
-
-          <Card>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs font-mono">
-                <thead>
-                  <tr className="border-b border-[#232938] text-[#94A3B8] uppercase">
-                    <th className="py-3 px-3">Código</th>
-                    <th className="py-3 px-3">Tipo / Valor</th>
-                    <th className="py-3 px-3">Usos (Global)</th>
-                    <th className="py-3 px-3">Limite/CPF</th>
-                    <th className="py-3 px-3">Validade</th>
-                    <th className="py-3 px-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#1E2330]">
-                  {coupons.map((cpn) => (
-                    <tr key={cpn.id}>
-                      <td className="py-3 px-3 font-bold text-[#A3E635]">{cpn.code}</td>
-                      <td className="py-3 px-3">
-                        {cpn.discountType === 'PERCENTAGE'
-                          ? `${cpn.discountValue}% OFF`
-                          : `R$ ${cpn.discountValue.toFixed(2)} OFF`}
-                      </td>
-                      <td className="py-3 px-3">
-                        {cpn.currentUses} / {cpn.maxUsesGlobal}
-                      </td>
-                      <td className="py-3 px-3">{cpn.maxUsesPerCustomer} por CPF</td>
-                      <td className="py-3 px-3 text-[#94A3B8]">
-                        {new Date(cpn.validUntil).toLocaleDateString('pt-BR')}
-                      </td>
-                      <td className="py-3 px-3">
-                        <StatusBadge status={cpn.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {section === 'CAMPANHAS' && (
-        <Card
-          title="Campanhas de Aquisição & Atribuição UTM"
-          subtitle="Entidade separada de Produto e Oferta conforme princípio fundamental do blueprint"
-        >
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-[#232938] text-[#94A3B8] uppercase font-mono">
-                  <th className="py-3 px-3">Campanha</th>
-                  <th className="py-3 px-3">Canal / Mídia</th>
-                  <th className="py-3 px-3">Criativo</th>
-                  <th className="py-3 px-3">UTMs</th>
-                  <th className="py-3 px-3">CAC Est.</th>
-                  <th className="py-3 px-3">Investimento</th>
-                  <th className="py-3 px-3">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#1E2330]">
-                {campaigns.map((cmp) => (
-                  <tr key={cmp.id}>
-                    <td className="py-3 px-3 font-bold text-[#F3F5F8]">{cmp.name}</td>
-                    <td className="py-3 px-3 text-[#94A3B8]">
-                      {cmp.channel} • {cmp.media}
-                    </td>
-                    <td className="py-3 px-3 font-mono text-[#06B6D4]">{cmp.creative}</td>
-                    <td className="py-3 px-3 font-mono text-[11px] text-[#94A3B8]">
-                      src={cmp.utmSource} / med={cmp.utmMedium} / cmp={cmp.utmCampaign}
-                    </td>
-                    <td className="py-3 px-3 font-mono text-[#A3E635]">
-                      R$ {cmp.estimatedCac.toFixed(2)}
-                    </td>
-                    <td className="py-3 px-3 font-mono">R$ {cmp.adSpend.toFixed(2)}</td>
-                    <td className="py-3 px-3">
-                      <StatusBadge status={cmp.status} />
-                    </td>
-                  </tr>
+                  </Card>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
+            </div>
+          )}
 
-      {/* ==================================================================== */}
-      {/* 5. PEDIDOS & TIMELINE AUDITÁVEL (Seções 13, 14 e 26) */}
-      {/* ==================================================================== */}
-      {section === 'PEDIDOS' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-4">
+          {productTab === 'COMPLIANCE' && (
             <Card
-              title="Centro de Pedidos (#LC-XXXXX)"
-              subtitle="Status Financeiro e Status Operacional independentes"
+              title="Checklist de Conformidade & Rotulagem dos Produtos"
+              subtitle="Validação rápida de documentação, rótulo e comunicação antes de liberar ofertas ao público"
             >
-              <div className="space-y-3">
-                {orders.map((ord) => (
+              <div className="space-y-4">
+                {complianceReviews.map((rev) => (
                   <div
-                    key={ord.id}
-                    onClick={() => setSelectedOrder(ord)}
-                    className={`p-4 rounded-xl border cursor-pointer transition-all ${
-                      selectedOrder?.id === ord.id
-                        ? 'bg-[#171B24] border-[#A3E635]'
-                        : 'bg-[#090B0E] border-[#232938]'
-                    }`}
+                    key={rev.id}
+                    className="bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] rounded-xl p-4 space-y-3"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-bold text-[#A3E635]">
-                          {ord.orderNumber}
-                        </span>
-                        <StatusBadge status={ord.consolidatedStatus} />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Badge tone="cyan">{rev.targetType}</Badge>
+                          <h4 className="text-sm font-bold text-[var(--text-primary)]">
+                            {rev.targetName}
+                          </h4>
+                        </div>
+                        <p className="text-xs text-[var(--text-secondary)] mt-1">{rev.notes}</p>
                       </div>
-                      <span className="font-mono text-sm font-bold text-[#F3F5F8]">
-                        R$ {ord.total.toFixed(2)}
-                      </span>
+                      <StatusBadge status={rev.status} />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2 text-xs text-[#94A3B8]">
-                      <div>
-                        <strong>Cliente:</strong> {ord.customerSnapshot.name}
-                      </div>
-                      <div>
-                        <strong>Vendedor:</strong> {ord.sellerName}
-                      </div>
-                      <div>
-                        <strong>Rastreio:</strong>{' '}
-                        <span className="font-mono text-[#06B6D4]">
-                          {ord.trackingCode || 'Em fila'}
-                        </span>
-                      </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 bg-[var(--bg-surface)] p-3 rounded-xl border border-[var(--border-subtle)] text-xs">
+                      {(
+                        [
+                          ['documentacaoExistente', '1. Documentação'],
+                          ['statusRegulatorio', '2. Status ANVISA'],
+                          ['claimsAprovados', '3. Claims IN 28'],
+                          ['rotulagem', '4. Rotulagem'],
+                          ['comunicacaoComercial', '5. Copy Comercial'],
+                          ['advertenciasObrigatorias', '6. Advertências'],
+                        ] as const
+                      ).map(([key, label]) => (
+                        <label
+                          key={key}
+                          className="flex items-center gap-2 cursor-pointer text-[var(--text-primary)]"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={rev.checklist[key]}
+                            onChange={() => handleUpdateCompliance(rev, undefined, key)}
+                            className="accent-indigo-600"
+                          />
+                          <span>{label}</span>
+                        </label>
+                      ))}
                     </div>
 
-                    <div className="mt-3 pt-2.5 border-t border-[#232938] flex flex-wrap items-center justify-between gap-2 text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[#64748B]">Financeiro:</span>
-                        <StatusBadge status={ord.financialStatus} />
-                        <span className="text-[#64748B] ml-2">Operacional:</span>
-                        <StatusBadge status={ord.operationalStatus} />
-                      </div>
-                      <div className="flex gap-1.5">
-                        {(['picking', 'packing', 'shipped', 'delivered'] as const).map((st) => (
-                          <button
-                            key={st}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleUpdateOrderOperationalStatus(ord.id, st);
-                            }}
-                            className="px-2 py-0.5 rounded bg-[#11141B] hover:bg-[#A3E635] hover:text-[#090B0E] border border-[#232938] text-[10px] font-mono uppercase cursor-pointer"
-                          >
-                            → {st}
-                          </button>
-                        ))}
-                      </div>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        size="xs"
+                        variant="primary"
+                        onClick={() => handleUpdateCompliance(rev, 'APPROVED')}
+                      >
+                        Aprovar Conformidade
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="danger"
+                        onClick={() => handleUpdateCompliance(rev, 'REJECTED')}
+                      >
+                        Rejeitar
+                      </Button>
                     </div>
                   </div>
                 ))}
               </div>
             </Card>
-          </div>
-
-          <div>
-            {selectedOrder ? (
-              <Card
-                title={`Auditoria & Timeline ${selectedOrder.orderNumber}`}
-                subtitle="Cada transição registra evento, ator, valor anterior e novo valor"
-              >
-                <div className="mb-4 bg-[#090B0E] p-3 rounded-lg border border-[#232938] text-xs space-y-1">
-                  <div>
-                    <strong>Oferta:</strong> {selectedOrder.offerName}
-                  </div>
-                  <div>
-                    <strong>Campanha:</strong> {selectedOrder.campaignName}
-                  </div>
-                  <div>
-                    <strong>Endereço Completo (Restrito Admin/WMS):</strong>{' '}
-                    {selectedOrder.customerSnapshot.street}, {selectedOrder.customerSnapshot.number} —{' '}
-                    {selectedOrder.customerSnapshot.city}/{selectedOrder.customerSnapshot.state} (CEP:{' '}
-                    {selectedOrder.customerSnapshot.cep})
-                  </div>
-                </div>
-                <Timeline
-                  items={selectedOrder.timeline.map((t) => ({
-                    id: t.id,
-                    title: t.event,
-                    subtitle: t.note,
-                    timestamp: t.timestamp,
-                    actor: t.actor,
-                    previousValue: t.previousValue,
-                    newValue: t.newValue,
-                  }))}
-                />
-              </Card>
-            ) : (
-              <EmptyState title="Selecione um pedido" description="Clique em um pedido para ver detalhes." />
-            )}
-          </div>
+          )}
         </div>
       )}
 
       {/* ==================================================================== */}
-      {/* 6. PAGAMENTOS & RECONCILIAÇÃO DE WEBHOOKS (Seção 12) */}
+      {/* 3. VENDAS — Ofertas, Pedidos, Cupons e Campanhas unificados */}
       {/* ==================================================================== */}
-      {section === 'PAGAMENTOS' && (
-        <Card
-          title="Gateway de Pagamentos & Reconciliação de Webhooks"
-          subtitle="Proteção contra duplicidade (Idempotency Key), validação HMAC e separação financeira"
-        >
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs font-mono">
-              <thead>
-                <tr className="border-b border-[#232938] text-[#94A3B8] uppercase">
-                  <th className="py-3 px-3">Pedido</th>
-                  <th className="py-3 px-3">Ref. Externa</th>
-                  <th className="py-3 px-3">Chave Idempotência</th>
-                  <th className="py-3 px-3">Método</th>
-                  <th className="py-3 px-3">Valor / Taxa</th>
-                  <th className="py-3 px-3">Status</th>
-                  <th className="py-3 px-3">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#1E2330]">
-                {payments.map((pay) => (
-                  <tr key={pay.id}>
-                    <td className="py-3 px-3 font-bold text-[#A3E635]">{pay.orderNumber}</td>
-                    <td className="py-3 px-3 text-[#94A3B8]">{pay.externalReference}</td>
-                    <td className="py-3 px-3 text-[#64748B]">{pay.idempotencyKey}</td>
-                    <td className="py-3 px-3">{pay.method}</td>
-                    <td className="py-3 px-3">
-                      R$ {pay.amount.toFixed(2)}{' '}
-                      <span className="text-[#64748B]">(-R$ {pay.gatewayFee.toFixed(2)})</span>
-                    </td>
-                    <td className="py-3 px-3">
-                      <StatusBadge status={pay.status} />
-                    </td>
-                    <td className="py-3 px-3">
-                      {pay.status === 'APPROVED' && (
-                        <Button
-                          size="xs"
-                          variant="danger"
-                          onClick={() => handleRefundPayment(pay.id)}
-                        >
-                          Reembolsar
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {activeArea === 'VENDAS' && (
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-extrabold font-display text-[var(--text-primary)]">
+                Vendas, Ofertas & Pedidos
+              </h1>
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                Gerencie ofertas ativas, acompanhe todos os pedidos e configure cupons promocionais.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center bg-[var(--bg-subtle)] p-1 rounded-xl border border-[var(--border-subtle)]">
+                <button
+                  onClick={() => setSalesTab('OFERTAS')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                    salesTab === 'OFERTAS'
+                      ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  Ofertas Ativas ({offers.length})
+                </button>
+                <button
+                  onClick={() => setSalesTab('PEDIDOS')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                    salesTab === 'PEDIDOS'
+                      ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  Pedidos ({orders.length})
+                </button>
+                <button
+                  onClick={() => setSalesTab('CUPONS_CAMPANHAS')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                    salesTab === 'CUPONS_CAMPANHAS'
+                      ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  Cupons & Campanhas
+                </button>
+              </div>
+
+              {salesTab === 'OFERTAS' && (
+                <Button
+                  size="sm"
+                  icon={<Plus className="w-4 h-4" />}
+                  onClick={() => setOfferModalOpen(true)}
+                >
+                  Nova Oferta
+                </Button>
+              )}
+              {salesTab === 'CUPONS_CAMPANHAS' && (
+                <Button
+                  size="sm"
+                  icon={<Plus className="w-4 h-4" />}
+                  onClick={() => setCouponModalOpen(true)}
+                >
+                  Novo Cupom
+                </Button>
+              )}
+            </div>
           </div>
-        </Card>
+
+          {/* SUB-ABA: OFERTAS */}
+          {salesTab === 'OFERTAS' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {offers.map((off) => {
+                const linkedCamp = campaigns.find((c) => c.id === off.campaignId);
+                return (
+                  <Card
+                    key={off.id}
+                    title={off.name}
+                    subtitle={`Link: /o/${off.code} · Campanha: ${linkedCamp?.name || 'Tráfego Direto'}`}
+                    action={<StatusBadge status={off.status} />}
+                  >
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge tone="lime">/o/{off.code}</Badge>
+                        <Badge tone="cyan">{off.offerType}</Badge>
+                        {off.freeShipping && <Badge tone="emerald">Frete Grátis</Badge>}
+                        {off.defaultCouponCode && (
+                          <Badge tone="slate">Cupom: {off.defaultCouponCode}</Badge>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-3 bg-[var(--bg-subtle)]/60 p-3.5 rounded-xl border border-[var(--border-subtle)] font-mono text-xs">
+                        <div>
+                          <span className="text-[var(--text-muted)] block">De</span>
+                          <span className="line-through text-[var(--text-secondary)]">
+                            R$ {off.regularPrice.toFixed(2)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[var(--text-muted)] block">Por</span>
+                          <strong className="text-base text-indigo-600 dark:text-indigo-400">
+                            R$ {off.promotionalPrice.toFixed(2)}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-[var(--text-muted)] block">Vendas / Limite</span>
+                          <strong className="text-emerald-600 dark:text-emerald-400">
+                            {off.usageCount} / {off.usageLimit}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap justify-between items-center gap-2 pt-2 border-t border-[var(--border-subtle)]">
+                        <span className="text-xs font-mono text-[var(--text-secondary)] truncate max-w-[220px]">
+                          {`${window.location.origin}/o/${off.code}`}
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {off.status !== 'ACTIVE' && (
+                            <Button
+                              size="xs"
+                              variant="primary"
+                              onClick={() => handlePublishOffer(off.id)}
+                            >
+                              Ativar Oferta
+                            </Button>
+                          )}
+                          <Button
+                            size="xs"
+                            variant="secondary"
+                            icon={<Copy className="w-3.5 h-3.5" />}
+                            onClick={() => {
+                              const url = `${window.location.origin}/o/${off.code}`;
+                              navigator.clipboard?.writeText(url);
+                              onNotify(`Link copiado: ${url}`, 'success');
+                            }}
+                          >
+                            Copiar Link
+                          </Button>
+                          <Button
+                            size="xs"
+                            variant="primary"
+                            icon={<ExternalLink className="w-3.5 h-3.5" />}
+                            onClick={() => onOpenPublicLink(off.code)}
+                          >
+                            Abrir Checkout
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          {/* SUB-ABA: PEDIDOS (com pagamento contextualizado) */}
+          {salesTab === 'PEDIDOS' && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 space-y-3">
+                {orders.map((ord) => {
+                  const orderPayment = payments.find((p) => p.orderId === ord.id);
+                  return (
+                    <div
+                      key={ord.id}
+                      onClick={() => setSelectedOrder(ord)}
+                      className={`modern-card rounded-2xl p-4 cursor-pointer transition-all ${
+                        selectedOrder?.id === ord.id
+                          ? 'ring-2 ring-indigo-500'
+                          : 'hover:border-indigo-500/40'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm font-bold text-indigo-600 dark:text-indigo-400">
+                            {ord.orderNumber}
+                          </span>
+                          <StatusBadge status={ord.consolidatedStatus} />
+                        </div>
+                        <span className="font-mono text-base font-extrabold text-[var(--text-primary)] tabular-nums">
+                          R$ {ord.total.toFixed(2)}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2.5 text-xs text-[var(--text-secondary)]">
+                        <div>
+                          <strong>Cliente:</strong> {ord.customerSnapshot.name}
+                        </div>
+                        <div>
+                          <strong>Vendedor:</strong> {ord.sellerName}
+                        </div>
+                        <div>
+                          <strong>Pagamento:</strong> {ord.paymentMethod} ({ord.financialStatus})
+                        </div>
+                      </div>
+
+                      <div className="mt-3 pt-2.5 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <span className="text-[var(--text-muted)]">
+                          Oferta: {ord.offerName}
+                        </span>
+                        <div className="flex gap-2">
+                          {orderPayment && orderPayment.status === 'APPROVED' && (
+                            <Button
+                              size="xs"
+                              variant="danger"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRefundPayment(orderPayment.id);
+                              }}
+                            >
+                              Estornar Pagamento
+                            </Button>
+                          )}
+                          <Button
+                            size="xs"
+                            variant="secondary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSection('ENTREGAS');
+                            }}
+                          >
+                            Gerenciar Entrega →
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div>
+                {selectedOrder ? (
+                  <Card
+                    title={`Detalhes do Pedido ${selectedOrder.orderNumber}`}
+                    subtitle={`${selectedOrder.customerSnapshot.name} · ${selectedOrder.customerSnapshot.city}/${selectedOrder.customerSnapshot.state}`}
+                  >
+                    <div className="mb-4 bg-[var(--bg-subtle)]/60 p-3.5 rounded-xl border border-[var(--border-subtle)] text-xs space-y-1.5">
+                      <div>
+                        <strong>Itens:</strong>{' '}
+                        {selectedOrder.items.map((i) => `${i.quantity}x ${i.productName}`).join(', ')}
+                      </div>
+                      <div>
+                        <strong>Endereço de Entrega:</strong> {selectedOrder.customerSnapshot.street},{' '}
+                        {selectedOrder.customerSnapshot.number} — CEP {selectedOrder.customerSnapshot.cep}
+                      </div>
+                      <div>
+                        <strong>Rastreio:</strong>{' '}
+                        <span className="font-mono text-indigo-600 dark:text-indigo-400">
+                          {selectedOrder.trackingCode || 'Aguardando despacho'}
+                        </span>
+                      </div>
+                    </div>
+                    <Timeline
+                      items={selectedOrder.timeline.map((t) => ({
+                        id: t.id,
+                        title: t.event,
+                        subtitle: t.note,
+                        timestamp: t.timestamp,
+                        actor: t.actor,
+                        previousValue: t.previousValue,
+                        newValue: t.newValue,
+                      }))}
+                    />
+                  </Card>
+                ) : (
+                  <EmptyState
+                    title="Selecione um pedido"
+                    description="Clique em um pedido ao lado para ver o histórico completo."
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* SUB-ABA: CUPONS & CAMPANHAS VINCULADAS */}
+          {salesTab === 'CUPONS_CAMPANHAS' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card
+                title="Cupons de Desconto"
+                subtitle="Cupons ativos para uso no checkout e pelos vendedores"
+              >
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-[var(--border-subtle)] text-[var(--text-secondary)]">
+                        <th className="py-2.5 px-2">Cupom</th>
+                        <th className="py-2.5 px-2">Desconto</th>
+                        <th className="py-2.5 px-2">Usos</th>
+                        <th className="py-2.5 px-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border-subtle)] font-mono">
+                      {coupons.map((cpn) => (
+                        <tr key={cpn.id}>
+                          <td className="py-2.5 px-2 font-bold text-indigo-600 dark:text-indigo-400">
+                            {cpn.code}
+                          </td>
+                          <td className="py-2.5 px-2">
+                            {cpn.discountType === 'PERCENTAGE'
+                              ? `${cpn.discountValue}% OFF`
+                              : `R$ ${cpn.discountValue.toFixed(2)} OFF`}
+                          </td>
+                          <td className="py-2.5 px-2">
+                            {cpn.currentUses}/{cpn.maxUsesGlobal}
+                          </td>
+                          <td className="py-2.5 px-2">
+                            <StatusBadge status={cpn.status} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+
+              <Card
+                title="Campanhas Vinculadas às Ofertas"
+                subtitle="Origem de tráfego das ofertas ativas"
+              >
+                <div className="space-y-3">
+                  {campaigns.map((cmp) => (
+                    <div
+                      key={cmp.id}
+                      className="p-3.5 rounded-xl bg-[var(--bg-subtle)]/60 border border-[var(--border-subtle)] flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <div className="font-bold text-[var(--text-primary)]">{cmp.name}</div>
+                        <div className="text-[var(--text-secondary)] mt-0.5">
+                          {cmp.channel} · UTM: <code className="font-mono">{cmp.utmCampaign}</code>
+                        </div>
+                      </div>
+                      <div className="text-right font-mono">
+                        <div className="text-[var(--text-primary)] font-bold">
+                          CAC: R$ {cmp.estimatedCac.toFixed(2)}
+                        </div>
+                        <StatusBadge status={cmp.status} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </div>
+          )}
+        </div>
       )}
 
       {/* ==================================================================== */}
-      {/* 7. FULFILLMENT & LOGÍSTICA WMS (Seções 11 e 15) */}
+      {/* 4. CLIENTES — Lista simples de compradores + histórico de pedidos */}
       {/* ==================================================================== */}
-      {(section === 'FULFILLMENT' || section === 'LOGISTICA') && (
+      {activeArea === 'CLIENTES' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-            {[
-              { label: '1. Pagos (Fila)', st: 'waiting' },
-              { label: '2. Separação', st: 'picking' },
-              { label: '3. Embalagem', st: 'packing' },
-              { label: '4. Expedição', st: 'ready_to_ship' },
-              { label: '5. Enviado', st: 'shipped' },
-              { label: '6. Entregue', st: 'delivered' },
-              { label: '7. Exceções', st: 'exception' },
-            ].map((col) => {
-              const count = orders.filter((o) => o.operationalStatus === col.st).length;
-              return (
-                <div
-                  key={col.st}
-                  className="bg-[#11141B] border border-[#232938] rounded-xl p-3 text-center"
-                >
-                  <div className="text-[11px] font-mono text-[#94A3B8] uppercase">{col.label}</div>
-                  <div className="text-2xl font-bold font-display text-[#A3E635] mt-1">{count}</div>
-                </div>
-              );
-            })}
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-extrabold font-display text-[var(--text-primary)]">
+                Clientes & Histórico de Compras
+              </h1>
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                Consulte rapidamente quem comprou, dados de contato e todos os pedidos de cada cliente.
+              </p>
+            </div>
+
+            <div className="flex items-center bg-[var(--bg-subtle)] p-1 rounded-xl border border-[var(--border-subtle)]">
+              <button
+                onClick={() => setCustomerTab('COMPRADORES')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                  customerTab === 'COMPRADORES'
+                    ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                Clientes ({customers.length})
+              </button>
+              <button
+                onClick={() => setCustomerTab('LEADS')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                  customerTab === 'LEADS'
+                    ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                Em Atendimento ({leads.length})
+              </button>
+            </div>
           </div>
 
-          <Card
-            title="Operação de Fulfillment & Controle de Exceções Logísticas"
-            subtitle="Avance os pedidos elegíveis pela esteira física ou registre exceções (endereço inválido, atraso, devolução)"
-          >
-            <div className="space-y-3">
-              {orders.map((ord) => (
+          {customerTab === 'COMPRADORES' ? (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="lg:col-span-7">
+                <Card title="Clientes Cadastrados">
+                  <div className="space-y-3">
+                    {customers.map((c) => {
+                      const custOrders = orders.filter((o) => o.customerId === c.id);
+                      const totalSpent = custOrders.reduce((acc, o) => acc + o.total, 0);
+                      const isSelected = selectedCustomerId === c.id;
+                      return (
+                        <div
+                          key={c.id}
+                          onClick={() => setSelectedCustomerId(c.id)}
+                          className={`p-4 rounded-xl border cursor-pointer transition-all flex flex-wrap items-center justify-between gap-3 ${
+                            isSelected
+                              ? 'bg-indigo-500/10 border-indigo-500'
+                              : 'bg-[var(--bg-subtle)]/50 border-[var(--border-subtle)] hover:border-indigo-500/40'
+                          }`}
+                        >
+                          <div>
+                            <div className="text-sm font-bold text-[var(--text-primary)]">
+                              {c.name}
+                            </div>
+                            <div className="text-xs text-[var(--text-secondary)] mt-0.5">
+                              {c.phone} · {c.email} · {c.city}/{c.state}
+                            </div>
+                          </div>
+                          <div className="text-right font-mono">
+                            <div className="text-sm font-bold text-indigo-600 dark:text-indigo-400 tabular-nums">
+                              R$ {totalSpent.toFixed(2)}
+                            </div>
+                            <div className="text-[11px] text-[var(--text-muted)]">
+                              {custOrders.length} pedido(s)
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+              </div>
+
+              <div className="lg:col-span-5">
+                {(() => {
+                  const activeCustomer = customers.find((c) => c.id === selectedCustomerId);
+                  if (!activeCustomer) {
+                    return (
+                      <EmptyState
+                        title="Selecione um cliente"
+                        description="Clique em um cliente para ver seus dados e histórico de pedidos."
+                      />
+                    );
+                  }
+                  const custOrders = orders.filter((o) => o.customerId === activeCustomer.id);
+                  return (
+                    <Card
+                      title={activeCustomer.name}
+                      subtitle={`CPF: ${activeCustomer.cpf} · ${activeCustomer.city}/${activeCustomer.state}`}
+                      action={
+                        !activeCustomer.anonymized && (
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            onClick={() => handleAnonymizeCustomer(activeCustomer.id)}
+                          >
+                            Anonimizar LGPD
+                          </Button>
+                        )
+                      }
+                    >
+                      <div className="space-y-4 text-xs">
+                        <div className="p-3.5 rounded-xl bg-[var(--bg-subtle)]/60 border border-[var(--border-subtle)] space-y-1">
+                          <div>
+                            <strong>WhatsApp:</strong> {activeCustomer.phone}
+                          </div>
+                          <div>
+                            <strong>E-mail:</strong> {activeCustomer.email}
+                          </div>
+                          <div>
+                            <strong>Endereço:</strong> {activeCustomer.street}, {activeCustomer.number}{' '}
+                            ({activeCustomer.neighborhood}) — CEP {activeCustomer.cep}
+                          </div>
+                        </div>
+
+                        <div>
+                          <h4 className="font-bold text-[var(--text-primary)] mb-2">
+                            Histórico de Pedidos ({custOrders.length})
+                          </h4>
+                          <div className="space-y-2">
+                            {custOrders.map((o) => (
+                              <div
+                                key={o.id}
+                                className="p-3 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] flex items-center justify-between"
+                              >
+                                <div>
+                                  <div className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                    {o.orderNumber}
+                                  </div>
+                                  <div className="text-[var(--text-secondary)]">{o.offerName}</div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="font-mono font-bold text-[var(--text-primary)]">
+                                    R$ {o.total.toFixed(2)}
+                                  </div>
+                                  <StatusBadge status={o.consolidatedStatus} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })()}
+              </div>
+            </div>
+          ) : (
+            <Card
+              title="Contatos em Atendimento pelos Vendedores"
+              subtitle="Clientes potenciais que receberam links de oferta"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {leads.map((ld) => (
+                  <div
+                    key={ld.id}
+                    className="p-4 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] space-y-2 text-xs"
+                  >
+                    <div className="flex items-center justify-between">
+                      <strong className="text-sm text-[var(--text-primary)]">{ld.name}</strong>
+                      <StatusBadge status={ld.stage} />
+                    </div>
+                    <div className="font-mono text-[var(--text-secondary)]">{ld.contact}</div>
+                    <div className="text-[var(--text-muted)]">Origem: {ld.origin}</div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* 5. ENTREGAS — Unifica Fulfillment e Logística em uma tela única */}
+      {/* ==================================================================== */}
+      {activeArea === 'ENTREGAS' && (
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-extrabold font-display text-[var(--text-primary)]">
+                Central de Entregas & Expedição
+              </h1>
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                Acompanhe pedidos aguardando preparação, despachos, códigos de rastreio e exceções de entrega.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center bg-[var(--bg-subtle)] p-1 rounded-xl border border-[var(--border-subtle)] gap-1">
+              {(
+                [
+                  ['ALL', `Todos (${orders.length})`],
+                  ['AGUARDANDO', `Aguardando Envio (${awaitingPreparationOrders.length})`],
+                  [
+                    'ENVIADOS',
+                    `Enviados (${orders.filter((o) => o.operationalStatus === 'shipped').length})`,
+                  ],
+                  ['PROBLEMAS', `Problemas (${exceptionOrders.length})`],
+                  [
+                    'ENTREGUES',
+                    `Entregues (${orders.filter((o) => o.operationalStatus === 'delivered').length})`,
+                  ],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setDeliveryFilter(key)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                    deliveryFilter === key
+                      ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {orders
+              .filter((ord) => {
+                if (deliveryFilter === 'AGUARDANDO')
+                  return ['waiting', 'picking', 'packing', 'ready_to_ship'].includes(
+                    ord.operationalStatus
+                  );
+                if (deliveryFilter === 'ENVIADOS')
+                  return ['shipped', 'in_transit'].includes(ord.operationalStatus);
+                if (deliveryFilter === 'PROBLEMAS') return ord.operationalStatus === 'exception';
+                if (deliveryFilter === 'ENTREGUES') return ord.operationalStatus === 'delivered';
+                return true;
+              })
+              .map((ord) => (
                 <div
                   key={ord.id}
-                  className="bg-[#171B24] border border-[#232938] rounded-xl p-4 flex flex-wrap items-center justify-between gap-4"
+                  className="modern-card rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4"
                 >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm font-bold text-[#A3E635]">
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-sm font-bold text-indigo-600 dark:text-indigo-400">
                         {ord.orderNumber}
                       </span>
-                      <StatusBadge status={ord.financialStatus} />
-                      <StatusBadge status={ord.operationalStatus} />
+                      <StatusBadge status={ord.consolidatedStatus} />
                       {ord.exceptionReason && (
-                        <Badge tone="danger">EXCEÇÃO: {ord.exceptionReason}</Badge>
+                        <Badge tone="danger">Problema: {ord.exceptionReason}</Badge>
                       )}
                     </div>
-                    <div className="text-xs text-[#F3F5F8] font-semibold">
-                      Itens para Conferência:{' '}
-                      {ord.items.map((i) => `${i.quantity}x ${i.productName} (${i.sku})`).join(', ')}
+                    <div className="text-sm font-bold text-[var(--text-primary)]">
+                      {ord.customerSnapshot.name} —{' '}
+                      <span className="font-normal text-[var(--text-secondary)]">
+                        {ord.items.map((i) => `${i.quantity}x ${i.productName}`).join(', ')}
+                      </span>
                     </div>
-                    <div className="text-xs text-[#94A3B8] font-mono">
-                      Destinatário: {ord.customerSnapshot.name} • CEP: {ord.customerSnapshot.cep} •
-                      Serviço: {ord.shippingService} • Rastreio:{' '}
-                      <strong className="text-[#06B6D4]">{ord.trackingCode || 'Não emitido'}</strong>
+                    <div className="text-xs text-[var(--text-secondary)]">
+                      Destino: {ord.customerSnapshot.street}, {ord.customerSnapshot.number} ·{' '}
+                      {ord.customerSnapshot.city}/{ord.customerSnapshot.state} (CEP{' '}
+                      {ord.customerSnapshot.cep}) · Rastreio:{' '}
+                      <strong className="font-mono text-indigo-600 dark:text-indigo-400">
+                        {ord.trackingCode || 'Etiqueta pendente'}
+                      </strong>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       size="xs"
                       variant="secondary"
                       onClick={() => handleUpdateOrderOperationalStatus(ord.id, 'picking')}
                     >
-                      1. Separação
+                      1. Separar
                     </Button>
                     <Button
                       size="xs"
                       variant="secondary"
                       onClick={() => handleUpdateOrderOperationalStatus(ord.id, 'packing')}
                     >
-                      2. Embalagem
+                      2. Embalar
                     </Button>
                     <Button
                       size="xs"
                       variant="cyan"
                       onClick={() => handleUpdateOrderOperationalStatus(ord.id, 'ready_to_ship')}
                     >
-                      3. Emitir Etiqueta
+                      3. Gerar Etiqueta
                     </Button>
                     <Button
                       size="xs"
@@ -1327,16 +1797,16 @@ export const AdminWorkspace: React.FC<{
                       variant="secondary"
                       onClick={() => handleUpdateOrderOperationalStatus(ord.id, 'delivered')}
                     >
-                      5. Entregue
+                      5. Confirmar Entrega
                     </Button>
                     {ord.trackingCode && (
                       <a
                         href={`/api/shipments/label/${ord.trackingCode}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-[#A3E635]/15 text-[#A3E635] border border-[#A3E635]/40 hover:bg-[#A3E635]/25"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20"
                       >
-                        Imprimir Etiqueta ({ord.trackingCode})
+                        Etiqueta ({ord.trackingCode})
                       </a>
                     )}
                     <Button
@@ -1346,107 +1816,136 @@ export const AdminWorkspace: React.FC<{
                         handleUpdateOrderOperationalStatus(ord.id, 'exception', 'atraso')
                       }
                     >
-                      Reportar Exceção
+                      Reportar Problema
                     </Button>
                   </div>
                 </div>
               ))}
-            </div>
-          </Card>
+          </div>
         </div>
       )}
 
       {/* ==================================================================== */}
-      {/* 8. CRM, LEADS, CLIENTES & PRIVACIDADE LGPD (Seções 16 e 32) */}
+      {/* 6. VENDEDORES — Vendedores, Links, Comissões e Desempenho */}
       {/* ==================================================================== */}
-      {(section === 'CRM' || section === 'LEADS' || section === 'CLIENTES') && (
+      {activeArea === 'VENDEDORES' && (
         <div className="space-y-6">
-          <Card
-            title="Pipeline CRM: LEAD → INTERESSADO → OFERTA → CHECKOUT → CLIENTE → RECOMPRA"
-            subtitle="Armazena histórico de interações, ofertas apresentadas e ofertas efetivamente compradas"
-          >
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {leads.map((ld) => (
-                <div
-                  key={ld.id}
-                  className="bg-[#171B24] border border-[#232938] rounded-xl p-4 space-y-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm text-[#F3F5F8]">{ld.name}</span>
-                    <StatusBadge status={ld.stage} />
-                  </div>
-                  <div className="text-xs font-mono text-[#94A3B8]">{ld.contact}</div>
-                  <div className="text-xs">
-                    <span className="text-[#64748B] block">Ofertas Apresentadas:</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {ld.offersPresented.map((o) => (
-                        <Badge key={o} tone="cyan">
-                          {o}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="text-xs">
-                    <span className="text-[#64748B] block">Ofertas Compradas:</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {ld.offersPurchased.length === 0 ? (
-                        <span className="text-[#64748B]">Nenhuma compra ainda</span>
-                      ) : (
-                        ld.offersPurchased.map((o) => (
-                          <Badge key={o} tone="emerald">
-                            {o}
-                          </Badge>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
+          <div>
+            <h1 className="text-xl font-extrabold font-display text-[var(--text-primary)]">
+              Vendedores, Links & Comissões
+            </h1>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+              Acompanhe o desempenho de cada vendedor, seus links rastreáveis ativos e comissões geradas.
+            </p>
+          </div>
 
+          {/* Desempenho por Vendedor */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {users
+              .filter((u) => u.role === 'VENDEDOR')
+              .map((seller) => {
+                const sellerOrders = orders.filter(
+                  (o) => o.sellerId === seller.id && o.financialStatus === 'approved'
+                );
+                const sellerRevenue = sellerOrders.reduce((acc, o) => acc + o.total, 0);
+                const sellerComms = commissions
+                  .filter((c) => c.sellerId === seller.id && c.status !== 'CANCELLED')
+                  .reduce((acc, c) => acc + c.amount, 0);
+                const sellerLinks = offerLinks.filter((l) => l.sellerId === seller.id);
+
+                return (
+                  <Card
+                    key={seller.id}
+                    title={seller.name}
+                    subtitle={`Código: ${seller.sellerCode} · Comissão: ${seller.commissionRate}%`}
+                    action={<StatusBadge status={seller.status} />}
+                  >
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-3 gap-3 bg-[var(--bg-subtle)]/60 p-3.5 rounded-xl border border-[var(--border-subtle)] text-xs font-mono">
+                        <div>
+                          <span className="text-[var(--text-muted)] block font-sans">Vendas Pagas</span>
+                          <strong className="text-sm text-[var(--text-primary)]">
+                            R$ {sellerRevenue.toFixed(2)}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-[var(--text-muted)] block font-sans">Pedidos</span>
+                          <strong className="text-sm text-indigo-600 dark:text-indigo-400">
+                            {sellerOrders.length}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-[var(--text-muted)] block font-sans">Comissões</span>
+                          <strong className="text-sm text-emerald-600 dark:text-emerald-400">
+                            R$ {sellerComms.toFixed(2)}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold text-[var(--text-secondary)]">
+                          Links Ativos do Vendedor ({sellerLinks.length}):
+                        </div>
+                        {sellerLinks.map((lnk) => (
+                          <div
+                            key={lnk.id}
+                            className="p-2.5 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] flex items-center justify-between text-xs"
+                          >
+                            <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                              /o/{lnk.code}
+                            </span>
+                            <span className="text-[var(--text-secondary)]">
+                              {lnk.clicks} cliques · {lnk.conversions} vendas
+                            </span>
+                            <Button
+                              size="xs"
+                              variant="secondary"
+                              onClick={() => onOpenPublicLink(lnk.code)}
+                            >
+                              Abrir
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+          </div>
+
+          {/* Comissões por Pedido */}
           <Card
-            title="Base de Clientes da Operação & Direitos do Titular (LGPD)"
-            subtitle="Permite acesso, correção e anonimização de dados pessoais com registro de auditoria"
+            title="Extrato de Comissões por Pedido"
+            subtitle="Valores calculados e congelados automaticamente em cada venda aprovada"
           >
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-[#232938] text-[#94A3B8] uppercase font-mono">
-                    <th className="py-3 px-3">Cliente</th>
-                    <th className="py-3 px-3">E-mail / Telefone</th>
-                    <th className="py-3 px-3">CPF</th>
-                    <th className="py-3 px-3">Localidade</th>
-                    <th className="py-3 px-3">Status LGPD</th>
-                    <th className="py-3 px-3">Ação Privacidade</th>
+                  <tr className="border-b border-[var(--border-subtle)] text-[var(--text-secondary)]">
+                    <th className="py-2.5 px-3">Vendedor</th>
+                    <th className="py-2.5 px-3">Pedido</th>
+                    <th className="py-2.5 px-3">Valor Base</th>
+                    <th className="py-2.5 px-3">% Aplicado</th>
+                    <th className="py-2.5 px-3">Comissão</th>
+                    <th className="py-2.5 px-3">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#1E2330]">
-                  {customers.map((c) => (
+                <tbody className="divide-y divide-[var(--border-subtle)] font-mono">
+                  {commissions.map((c) => (
                     <tr key={c.id}>
-                      <td className="py-3 px-3 font-bold text-[#F3F5F8]">{c.name}</td>
-                      <td className="py-3 px-3 font-mono text-[#94A3B8]">
-                        {c.email} / {c.phone}
+                      <td className="py-3 px-3 font-sans font-semibold text-[var(--text-primary)]">
+                        {c.sellerName}
                       </td>
-                      <td className="py-3 px-3 font-mono">{c.cpf}</td>
-                      <td className="py-3 px-3">
-                        {c.city}/{c.state}
+                      <td className="py-3 px-3 font-bold text-indigo-600 dark:text-indigo-400">
+                        {c.orderNumber}
                       </td>
-                      <td className="py-3 px-3">
-                        <Badge tone={c.anonymized ? 'amber' : 'emerald'}>
-                          {c.anonymized ? 'ANONIMIZADO' : 'ATIVO / OPT-IN'}
-                        </Badge>
+                      <td className="py-3 px-3">R$ {c.calculationBase.toFixed(2)}</td>
+                      <td className="py-3 px-3">{c.percentage}%</td>
+                      <td className="py-3 px-3 font-bold text-emerald-600 dark:text-emerald-400">
+                        R$ {c.amount.toFixed(2)}
                       </td>
                       <td className="py-3 px-3">
-                        {!c.anonymized && (
-                          <Button
-                            size="xs"
-                            variant="danger"
-                            onClick={() => handleAnonymizeCustomer(c.id)}
-                          >
-                            Anonimizar (LGPD)
-                          </Button>
-                        )}
+                        <StatusBadge status={c.status} />
                       </td>
                     </tr>
                   ))}
@@ -1458,459 +1957,221 @@ export const AdminWorkspace: React.FC<{
       )}
 
       {/* ==================================================================== */}
-      {/* 9. VENDEDORES & COMISSÕES CONGELADAS (Seções 17 e 18) */}
+      {/* 7. CONFIGURAÇÕES — Regras, Usuários, Integrações, Automações e Auditoria */}
       {/* ==================================================================== */}
-      {(section === 'VENDEDORES' || section === 'COMISSOES') && (
-        <Card
-          title="Comissões Congeladas por Pedido & Governança de Vendedores"
-          subtitle="A comissão é gravada de forma imutável na criação do pedido para evitar alterações retroativas"
-        >
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs font-mono">
-              <thead>
-                <tr className="border-b border-[#232938] text-[#94A3B8] uppercase">
-                  <th className="py-3 px-3">Vendedor</th>
-                  <th className="py-3 px-3">Pedido</th>
-                  <th className="py-3 px-3">Base Cálculo</th>
-                  <th className="py-3 px-3">% Congelado</th>
-                  <th className="py-3 px-3">Valor Comissão</th>
-                  <th className="py-3 px-3">Regra Snapshot</th>
-                  <th className="py-3 px-3">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#1E2330]">
-                {commissions.map((c) => (
-                  <tr key={c.id}>
-                    <td className="py-3 px-3 font-sans font-bold text-[#F3F5F8]">{c.sellerName}</td>
-                    <td className="py-3 px-3 font-bold text-[#A3E635]">{c.orderNumber}</td>
-                    <td className="py-3 px-3">R$ {c.calculationBase.toFixed(2)}</td>
-                    <td className="py-3 px-3">{c.percentage}%</td>
-                    <td className="py-3 px-3 font-bold text-[#10B981]">R$ {c.amount.toFixed(2)}</td>
-                    <td className="py-3 px-3 text-[11px] text-[#94A3B8]">{c.ruleUsed}</td>
-                    <td className="py-3 px-3">
-                      <StatusBadge status={c.status} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {/* ==================================================================== */}
-      {/* 10. AUTOMAÇÕES, RECUPERAÇÃO E PÓS-VENDA (Seções 19 e 20) */}
-      {/* ==================================================================== */}
-      {section === 'AUTOMACOES' && (
-        <Card
-          title="Réguas de Recuperação & Jornada Pós-Venda (D0 → Envio → Entrega → Recompra)"
-          subtitle="Desacopladas via NotificationProvider (WhatsApp / E-mail) com controle de janela permitida e opt-out"
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {automationRules.map((rule) => (
-              <div
-                key={rule.id}
-                className="bg-[#171B24] border border-[#232938] rounded-xl p-4 space-y-2.5"
-              >
-                <div className="flex items-center justify-between">
-                  <Badge tone="lime">GATILHO: {rule.triggerEvent}</Badge>
-                  <Badge tone="cyan">{rule.channel}</Badge>
-                </div>
-                <h4 className="text-sm font-bold text-[#F3F5F8]">{rule.name}</h4>
-                <p className="text-xs text-[#94A3B8] bg-[#090B0E] p-2.5 rounded border border-[#232938] font-mono">
-                  {rule.messageTemplate}
-                </p>
-                <div className="flex flex-wrap justify-between text-[11px] font-mono text-[#64748B]">
-                  <span>Atraso: {rule.delayMinutes} min</span>
-                  <span>Janela: {rule.allowedWindow}</span>
-                  <span>Opt-out respeitado: {rule.respectOptOut ? 'SIM' : 'TRANSACIONAL'}</span>
-                  <span className="text-[#A3E635]">Disparos: {rule.executionsCount}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* ==================================================================== */}
-      {/* 11. ECONOMIA UNITÁRIA & ANALYTICS (Seções 21 e 22) */}
-      {/* ==================================================================== */}
-      {(section === 'ECONOMIA' || section === 'ANALYTICS') && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card
-            title="Simulador Waterfall de Economia Unitária (Contribuição da Venda)"
-            subtitle="RECEITA BRUTA − descontos − impostos − gateway − comissão − produto − embalagem − frete subsidiado − CAC"
-          >
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <Input
-                label="Receita Bruta (R$)"
-                type="number"
-                value={simRevenue}
-                onChange={(e) => setSimRevenue(Number(e.target.value))}
-              />
-              <Input
-                label="Descontos (R$)"
-                type="number"
-                value={simDiscount}
-                onChange={(e) => setSimDiscount(Number(e.target.value))}
-              />
-              <Input
-                label="Custo Produto CMV (R$)"
-                type="number"
-                value={simProdCost}
-                onChange={(e) => setSimProdCost(Number(e.target.value))}
-              />
-              <Input
-                label="Frete Subsidiado (R$)"
-                type="number"
-                value={simShipSubsidy}
-                onChange={(e) => setSimShipSubsidy(Number(e.target.value))}
-              />
+      {activeArea === 'CONFIGURACOES' && (
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-extrabold font-display text-[var(--text-primary)]">
+                Configurações do Sistema
+              </h1>
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                Gerencie regras comerciais, acessos da equipe, integrações, mensagens automáticas e auditoria.
+              </p>
             </div>
 
-            <div className="bg-[#090B0E] border border-[#232938] rounded-xl p-4 space-y-2 font-mono text-xs">
-              <div className="flex justify-between text-[#F3F5F8]">
-                <span>(+) RECEITA BRUTA</span>
-                <span>R$ {simRevenue.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[#EF4444]">
-                <span>(−) Descontos Comerciais & Cupom</span>
-                <span>- R$ {simDiscount.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[#94A3B8]">
-                <span>(−) Impostos / Encargos ({econConfig.taxRatePercent}%)</span>
-                <span>- R$ {simTaxes.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[#94A3B8]">
-                <span>(−) Taxa Gateway ({econConfig.gatewayFeePercent}% + R$ 0,99)</span>
-                <span>- R$ {simGateway.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[#94A3B8]">
-                <span>(−) Comissão Vendedor ({econConfig.defaultCommissionPercent}%)</span>
-                <span>- R$ {simCommission.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[#94A3B8]">
-                <span>(−) Custo Físico do Produto (CMV)</span>
-                <span>- R$ {simProdCost.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[#94A3B8]">
-                <span>(−) Embalagem & Operação WMS</span>
-                <span>- R$ {econConfig.packagingAndOpCostPerOrder.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[#94A3B8]">
-                <span>(−) Frete Subsidiado</span>
-                <span>- R$ {simShipSubsidy.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[#94A3B8]">
-                <span>(−) CAC Alvo Atribuído</span>
-                <span>- R$ {econConfig.defaultCacTarget.toFixed(2)}</span>
-              </div>
-              <div className="pt-2 border-t border-[#232938] flex justify-between items-center text-sm font-bold">
-                <span>(=) CONTRIBUIÇÃO DA VENDA</span>
-                <span
-                  className={
-                    simMarginPct >= econConfig.minContributionMarginPercent
-                      ? 'text-[#A3E635]'
-                      : 'text-[#EF4444]'
-                  }
+            <div className="flex flex-wrap items-center bg-[var(--bg-subtle)] p-1 rounded-xl border border-[var(--border-subtle)] gap-1">
+              {(
+                [
+                  ['REGRAS', 'Regras & Margem'],
+                  ['USUARIOS', 'Usuários & Permissões'],
+                  ['INTEGRACOES', 'Integrações'],
+                  ['AUTOMACOES', 'Automações Pós-Venda'],
+                  ['AUDITORIA', 'Auditoria'],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setSettingsTab(key)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                    settingsTab === key
+                      ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
                 >
-                  R$ {simContribution.toFixed(2)} ({simMarginPct.toFixed(1)}%)
-                </span>
-              </div>
-            </div>
-          </Card>
-
-          <Card
-            title="Travas do Motor Comercial (Governança de Preço)"
-            subtitle="O backend bloqueia qualquer oferta ou cupom que viole estes limites"
-          >
-            <form onSubmit={handleSaveEconomicsConfig} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Margem de Contribuição Mínima (%)"
-                  type="number"
-                  value={econConfig.minContributionMarginPercent}
-                  onChange={(e) =>
-                    setEconConfig({
-                      ...econConfig,
-                      minContributionMarginPercent: Number(e.target.value),
-                    })
-                  }
-                />
-                <Input
-                  label="Teto Máximo de Desconto (%)"
-                  type="number"
-                  value={econConfig.maxDiscountCeilingPercent}
-                  onChange={(e) =>
-                    setEconConfig({
-                      ...econConfig,
-                      maxDiscountCeilingPercent: Number(e.target.value),
-                    })
-                  }
-                />
-                <Input
-                  label="Comissão Padrão (%)"
-                  type="number"
-                  value={econConfig.defaultCommissionPercent}
-                  onChange={(e) =>
-                    setEconConfig({
-                      ...econConfig,
-                      defaultCommissionPercent: Number(e.target.value),
-                    })
-                  }
-                />
-                <Input
-                  label="CAC Suportável Alvo (R$)"
-                  type="number"
-                  value={econConfig.defaultCacTarget}
-                  onChange={(e) =>
-                    setEconConfig({
-                      ...econConfig,
-                      defaultCacTarget: Number(e.target.value),
-                    })
-                  }
-                />
-                <Input
-                  label="Janela de Recompra Padrão (Dias)"
-                  type="number"
-                  value={econConfig.repurchaseCycleDays}
-                  onChange={(e) =>
-                    setEconConfig({
-                      ...econConfig,
-                      repurchaseCycleDays: Number(e.target.value),
-                    })
-                  }
-                />
-              </div>
-              <Button type="submit">Salvar Regras Comerciais</Button>
-            </form>
-          </Card>
-        </div>
-      )}
-
-      {/* ==================================================================== */}
-      {/* 12. COMPLIANCE GATE (Seção 24) */}
-      {/* ==================================================================== */}
-      {section === 'COMPLIANCE' && (
-        <Card
-          title="Compliance Gate — Aprovação Regulatória & Comercial"
-          subtitle="Nenhuma oferta é publicada sem 100% do checklist aprovado (Estados: DRAFT, UNDER_REVIEW, APPROVED, REJECTED, ARCHIVED)"
-        >
-          <div className="space-y-4">
-            {complianceReviews.map((rev) => (
-              <div
-                key={rev.id}
-                className="bg-[#171B24] border border-[#232938] rounded-xl p-4 space-y-4"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Badge tone="cyan">{rev.targetType}</Badge>
-                      <h4 className="text-sm font-bold text-[#F3F5F8]">{rev.targetName}</h4>
-                    </div>
-                    <p className="text-xs text-[#94A3B8] mt-1">{rev.notes}</p>
-                  </div>
-                  <StatusBadge status={rev.status} />
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 bg-[#090B0E] p-3 rounded-lg border border-[#232938] text-xs">
-                  {(
-                    [
-                      ['documentacaoExistente', '1. Documentação'],
-                      ['statusRegulatorio', '2. Status ANVISA'],
-                      ['claimsAprovados', '3. Claims IN 28'],
-                      ['rotulagem', '4. Rotulagem'],
-                      ['comunicacaoComercial', '5. Copy Comercial'],
-                      ['advertenciasObrigatorias', '6. Advertências'],
-                    ] as const
-                  ).map(([key, label]) => (
-                    <label
-                      key={key}
-                      className="flex items-center gap-2 cursor-pointer text-[#F3F5F8]"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={rev.checklist[key]}
-                        onChange={() => handleUpdateCompliance(rev, undefined, key)}
-                        className="accent-[#A3E635]"
-                      />
-                      <span>{label}</span>
-                    </label>
-                  ))}
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <span className="font-mono text-[#64748B]">
-                    Aprovador responsável: {rev.approvedBy || 'Pendente'}
-                  </span>
-                  <div className="flex gap-2">
-                    {(['UNDER_REVIEW', 'APPROVED', 'REJECTED', 'ARCHIVED'] as const).map((st) => (
-                      <Button
-                        key={st}
-                        size="xs"
-                        variant={st === 'APPROVED' ? 'primary' : st === 'REJECTED' ? 'danger' : 'secondary'}
-                        onClick={() => handleUpdateCompliance(rev, st)}
-                      >
-                        Definir {st}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* ==================================================================== */}
-      {/* 13. AUDITORIA IMUTÁVEL, RBAC, INTEGRAÇÕES & CONFIGURAÇÕES */}
-      {/* ==================================================================== */}
-      {section === 'AUDITORIA' && (
-        <Card
-          title="AuditLog Imutável de Governança (Seção 23)"
-          subtitle="Registra usuário, papel, ação, entidade, valor anterior, valor novo, timestamp e IP"
-        >
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs font-mono">
-              <thead>
-                <tr className="border-b border-[#232938] text-[#94A3B8] uppercase">
-                  <th className="py-3 px-2">Timestamp</th>
-                  <th className="py-3 px-2">Usuário / Papel</th>
-                  <th className="py-3 px-2">Ação</th>
-                  <th className="py-3 px-2">Entidade</th>
-                  <th className="py-3 px-2">Valor Anterior → Novo</th>
-                  <th className="py-3 px-2">IP</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#1E2330]">
-                {auditLogs.map((log) => (
-                  <tr key={log.id}>
-                    <td className="py-2.5 px-2 text-[#64748B]">
-                      {new Date(log.timestamp).toLocaleString('pt-BR')}
-                    </td>
-                    <td className="py-2.5 px-2">
-                      <span className="text-[#F3F5F8]">{log.userName}</span>{' '}
-                      <Badge tone="slate">{log.userRole}</Badge>
-                    </td>
-                    <td className="py-2.5 px-2 font-bold text-[#A3E635]">{log.action}</td>
-                    <td className="py-2.5 px-2 text-[#06B6D4]">
-                      {log.entity} ({log.entityId})
-                    </td>
-                    <td className="py-2.5 px-2 text-[#94A3B8]">
-                      {log.previousValue} → <strong className="text-white">{log.newValue}</strong>
-                    </td>
-                    <td className="py-2.5 px-2 text-[#64748B]">{log.ip}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {(section === 'USUARIOS' ||
-        section === 'PERMISSOES' ||
-        section === 'INTEGRACOES' ||
-        section === 'CONFIGURACOES') && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card
-            title="Usuários & Controle de Acesso RBAC (2FA)"
-            subtitle="Papéis operacionais: ADMIN, VENDEDOR e FULFILLMENT"
-          >
-            <div className="space-y-3">
-              {users.map((u) => (
-                <div
-                  key={u.id}
-                  className="bg-[#171B24] border border-[#232938] rounded-lg p-3.5 flex items-center justify-between"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-[#F3F5F8]">{u.name}</span>
-                      <Badge tone="lime">{u.role}</Badge>
-                      {u.twoFactorEnabled && <Badge tone="cyan">2FA ATIVO</Badge>}
-                    </div>
-                    <div className="text-xs font-mono text-[#94A3B8] mt-1">{u.email}</div>
-                  </div>
-                  <StatusBadge status={u.status} />
-                </div>
+                  {label}
+                </button>
               ))}
             </div>
-          </Card>
+          </div>
 
-          <Card
-            title="Camada Desacoplada de Integrações (Providers & Adapters)"
-            subtitle="Adapters DEMO claramente identificados prontos para plug-and-play de credenciais em variáveis de ambiente"
-          >
-            <div className="space-y-3 text-xs font-mono">
-              <div className="bg-[#090B0E] border border-[#232938] rounded-lg p-3.5">
-                <div className="flex justify-between items-center">
-                  <strong className="text-[#A3E635]">PaymentProvider Interface</strong>
-                  <Badge tone="amber">DEMO_PAGARME_V5_ADAPTER</Badge>
-                </div>
-                <p className="text-[#94A3B8] mt-1 font-sans">
-                  Métodos implementados: createPayment, getPayment, refund, validateWebhook (HMAC-SHA256 + Idempotência).
-                </p>
-              </div>
-
-              <div className="bg-[#090B0E] border border-[#232938] rounded-lg p-3.5">
-                <div className="flex justify-between items-center">
-                  <strong className="text-[#06B6D4]">ShippingProvider Interface</strong>
-                  <Badge tone="amber">DEMO_MELHOR_ENVIO_LOGGI_ADAPTER</Badge>
-                </div>
-                <p className="text-[#94A3B8] mt-1 font-sans">
-                  Métodos implementados: quote, createShipment, getTracking, cancelShipment + Fallback Automático de Contingência.
-                </p>
-              </div>
-
-              <div className="bg-[#090B0E] border border-[#232938] rounded-lg p-3.5">
-                <div className="flex justify-between items-center">
-                  <strong className="text-[#10B981]">NotificationProvider Interface</strong>
-                  <Badge tone="amber">DEMO_ZAPI_RESEND_ADAPTER</Badge>
-                </div>
-                <p className="text-[#94A3B8] mt-1 font-sans">
-                  Métodos implementados: sendWhatsApp, sendEmail (respeitando janela horária e opt-out LGPD).
-                </p>
-              </div>
-            </div>
-          </Card>
-
-          <div className="lg:col-span-2">
+          {settingsTab === 'REGRAS' && (
             <Card
-              title="20 · Matriz de Decisões dos Sócios (Parametrizável — Zero Hardcode)"
-              subtitle="Conforme definido no MVP Mestre Revisado v2, o código não engessa essas regras; todas são governadas nos módulos abaixo"
+              title="Regras Comerciais & Travas de Margem"
+              subtitle="Limites utilizados pelo backend para validar novas ofertas e cupons"
+            >
+              <form onSubmit={handleSaveEconomicsConfig} className="space-y-4 max-w-2xl">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input
+                    label="Margem de Contribuição Mínima (%)"
+                    type="number"
+                    value={econConfig.minContributionMarginPercent}
+                    onChange={(e) =>
+                      setEconConfig({
+                        ...econConfig,
+                        minContributionMarginPercent: Number(e.target.value),
+                      })
+                    }
+                  />
+                  <Input
+                    label="Teto Máximo de Desconto (%)"
+                    type="number"
+                    value={econConfig.maxDiscountCeilingPercent}
+                    onChange={(e) =>
+                      setEconConfig({
+                        ...econConfig,
+                        maxDiscountCeilingPercent: Number(e.target.value),
+                      })
+                    }
+                  />
+                  <Input
+                    label="Comissão Padrão de Vendedores (%)"
+                    type="number"
+                    value={econConfig.defaultCommissionPercent}
+                    onChange={(e) =>
+                      setEconConfig({
+                        ...econConfig,
+                        defaultCommissionPercent: Number(e.target.value),
+                      })
+                    }
+                  />
+                  <Input
+                    label="Ciclo Padrão de Recompra (Dias)"
+                    type="number"
+                    value={econConfig.repurchaseCycleDays}
+                    onChange={(e) =>
+                      setEconConfig({
+                        ...econConfig,
+                        repurchaseCycleDays: Number(e.target.value),
+                      })
+                    }
+                  />
+                </div>
+                <Button type="submit">Salvar Configurações Comerciais</Button>
+              </form>
+            </Card>
+          )}
+
+          {settingsTab === 'USUARIOS' && (
+            <Card
+              title="Usuários & Perfis de Acesso"
+              subtitle="Controle de acesso separado para Admin, Vendedores e Expedição (Fulfillment)"
+            >
+              <div className="space-y-3">
+                {users.map((u) => (
+                  <div
+                    key={u.id}
+                    className="p-3.5 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] flex items-center justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-[var(--text-primary)]">{u.name}</span>
+                        <Badge tone="lime">{u.role}</Badge>
+                        {u.twoFactorEnabled && <Badge tone="cyan">2FA Ativo</Badge>}
+                      </div>
+                      <div className="text-xs font-mono text-[var(--text-secondary)] mt-1">
+                        {u.email}
+                      </div>
+                    </div>
+                    <StatusBadge status={u.status} />
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {settingsTab === 'INTEGRACOES' && (
+            <Card
+              title="Integrações de Pagamento, Frete e Notificações"
+              subtitle="Serviços conectados à arquitetura da plataforma"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] space-y-2">
+                  <div className="flex justify-between items-center">
+                    <strong className="text-sm text-[var(--text-primary)]">Gateway de Pagamento</strong>
+                    <Badge tone="emerald">Ativo</Badge>
+                  </div>
+                  <p className="text-[var(--text-secondary)]">
+                    Geração de PIX Copia e Cola, Cartão e Boleto com confirmação via Webhook e proteção contra duplicidade.
+                  </p>
+                </div>
+                <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] space-y-2">
+                  <div className="flex justify-between items-center">
+                    <strong className="text-sm text-[var(--text-primary)]">Cotação & Frete</strong>
+                    <Badge tone="emerald">Ativo</Badge>
+                  </div>
+                  <p className="text-[var(--text-secondary)]">
+                    Cálculo por CEP, emissão de etiquetas de envio, rastreio e tabela nacional de contingência.
+                  </p>
+                </div>
+                <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] space-y-2">
+                  <div className="flex justify-between items-center">
+                    <strong className="text-sm text-[var(--text-primary)]">WhatsApp & E-mail</strong>
+                    <Badge tone="emerald">Ativo</Badge>
+                  </div>
+                  <p className="text-[var(--text-secondary)]">
+                    Disparo de confirmações de pedido, código de rastreio e lembretes de recompra.
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {settingsTab === 'AUTOMACOES' && (
+            <Card
+              title="Mensagens Automáticas de Pós-Venda & Recuperação"
+              subtitle="Gatilhos de WhatsApp e E-mail disparados conforme o status do pedido"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {automationRules.map((rule) => (
+                  <div
+                    key={rule.id}
+                    className="p-4 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <Badge tone="lime">{rule.triggerEvent}</Badge>
+                      <Badge tone="cyan">{rule.channel}</Badge>
+                    </div>
+                    <h4 className="text-sm font-bold text-[var(--text-primary)]">{rule.name}</h4>
+                    <p className="text-xs text-[var(--text-secondary)] bg-[var(--bg-surface)] p-2.5 rounded-lg border border-[var(--border-subtle)]">
+                      {rule.messageTemplate}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {settingsTab === 'AUDITORIA' && (
+            <Card
+              title="Histórico de Auditoria do Sistema"
+              subtitle="Registro cronológico de ações importantes na plataforma"
             >
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
+                <table className="w-full text-left border-collapse text-xs font-mono">
                   <thead>
-                    <tr className="border-b border-[#232938] text-[#94A3B8] uppercase font-mono">
-                      <th className="py-2.5 px-3">Item Estratégico</th>
-                      <th className="py-2.5 px-3">Status no Blueprint</th>
-                      <th className="py-2.5 px-3">Fechamento Necessário</th>
-                      <th className="py-2.5 px-3">Módulo de Parametrização na Plataforma</th>
+                    <tr className="border-b border-[var(--border-subtle)] text-[var(--text-secondary)]">
+                      <th className="py-2.5 px-2">Data/Hora</th>
+                      <th className="py-2.5 px-2">Usuário</th>
+                      <th className="py-2.5 px-2">Ação</th>
+                      <th className="py-2.5 px-2">Alteração</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#1E2330]">
-                    {[
-                      { item: 'Produtos (100 caps / ~R$ 15 base)', status: 'Base definida', tone: 'emerald' as const, desc: 'Fichas técnicas e status regulatório ANVISA pós-09/2024 por SKU', target: 'PRODUTOS' as AdminSection },
-                      { item: 'Combos', status: 'Parametrizável', tone: 'amber' as const, desc: 'Matriz de compatibilidade multi-SKU + comunicação', target: 'COMBOS' as AdminSection },
-                      { item: 'Preços (1 un, Kit 2, Kit 3+, Combo)', status: 'Parametrizável', tone: 'amber' as const, desc: 'Escada de valor e ancoragem no Offer Engine', target: 'OFERTAS' as AdminSection },
-                      { item: 'Comissão Congelada', status: 'Parametrizável', tone: 'amber' as const, desc: 'Percentual/valor + regra congelada no pedido', target: 'COMISSOES' as AdminSection },
-                      { item: 'Gateway de Pagamento', status: 'Adapter Pronto', tone: 'cyan' as const, desc: 'PaymentProvider + taxas + métodos PIX/Cartão/Boleto', target: 'PAGAMENTOS' as AdminSection },
-                      { item: 'Frete & Logística', status: 'Adapter Pronto', tone: 'cyan' as const, desc: 'ShippingProvider + CEP origem + frete subsidiado + fallback', target: 'LOGISTICA' as AdminSection },
-                      { item: 'Reembolso & Chargeback', status: 'Parametrizável', tone: 'amber' as const, desc: 'Política operacional e estorno de comissão', target: 'PAGAMENTOS' as AdminSection },
-                      { item: 'WhatsApp / E-mail', status: 'Adapter Pronto', tone: 'cyan' as const, desc: 'NotificationProvider + janela de disparo + opt-out LGPD', target: 'AUTOMACOES' as AdminSection },
-                      { item: 'Permissões RBAC', status: 'Ativo', tone: 'emerald' as const, desc: 'Separação estrita Admin / Vendedor / Fulfillment', target: 'PERMISSOES' as AdminSection },
-                      { item: 'Recompra', status: 'Parametrizável', tone: 'amber' as const, desc: 'Janelas em dias (ex: 60D) e mensagens permitidas', target: 'AUTOMACOES' as AdminSection },
-                      { item: 'Margem Mínima & Teto Desconto', status: 'Ativo no Motor', tone: 'lime' as const, desc: 'Trava automática de margem mínima + teto de desconto + CAC', target: 'ECONOMIA' as AdminSection },
-                    ].map((row) => (
-                      <tr key={row.item}>
-                        <td className="py-2.5 px-3 font-bold text-[#F3F5F8]">{row.item}</td>
-                        <td className="py-2.5 px-3"><Badge tone={row.tone}>{row.status}</Badge></td>
-                        <td className="py-2.5 px-3 text-[#94A3B8]">{row.desc}</td>
-                        <td className="py-2.5 px-3">
-                          <Button size="xs" variant="secondary" onClick={() => setSection(row.target)}>
-                            Abrir {row.target}
-                          </Button>
+                  <tbody className="divide-y divide-[var(--border-subtle)]">
+                    {auditLogs.map((log) => (
+                      <tr key={log.id}>
+                        <td className="py-2.5 px-2 text-[var(--text-muted)]">
+                          {new Date(log.timestamp).toLocaleString('pt-BR')}
+                        </td>
+                        <td className="py-2.5 px-2 text-[var(--text-primary)]">
+                          {log.userName} ({log.userRole})
+                        </td>
+                        <td className="py-2.5 px-2 font-bold text-indigo-600 dark:text-indigo-400">
+                          {log.action}
+                        </td>
+                        <td className="py-2.5 px-2 text-[var(--text-secondary)]">
+                          {log.previousValue} → <strong>{log.newValue}</strong>
                         </td>
                       </tr>
                     ))}
@@ -1918,28 +2179,28 @@ export const AdminWorkspace: React.FC<{
                 </table>
               </div>
             </Card>
-          </div>
+          )}
         </div>
       )}
 
       {/* ==================================================================== */}
-      {/* MODALS: CRIAR/EDITAR PRODUTO, OFERTA E CUPOM */}
+      {/* MODALS REAPROVEITADOS: PRODUTO, OFERTA E CUPOM */}
       {/* ==================================================================== */}
       <Modal
         open={productModalOpen}
         onClose={() => setProductModalOpen(false)}
-        title={editingProduct ? `Editar Produto ${editingProduct.sku}` : 'Cadastrar Novo Produto Físico'}
+        title={editingProduct ? `Editar Produto ${editingProduct.sku}` : 'Novo Produto'}
       >
         <form onSubmit={handleSaveProduct} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <Input
-              label="SKU Único"
+              label="SKU"
               value={prodForm.sku}
               onChange={(e) => setProdForm({ ...prodForm, sku: e.target.value })}
               required
             />
             <Select
-              label="Categoria (Taxonomia Interna)"
+              label="Categoria Interna"
               value={prodForm.category}
               onChange={(e) =>
                 setProdForm({ ...prodForm, category: e.target.value as ProductCategory })
@@ -1948,7 +2209,7 @@ export const AdminWorkspace: React.FC<{
             />
           </div>
           <Input
-            label="Nome Interno Técnico"
+            label="Nome Interno"
             value={prodForm.internalName}
             onChange={(e) => setProdForm({ ...prodForm, internalName: e.target.value })}
             required
@@ -1974,7 +2235,7 @@ export const AdminWorkspace: React.FC<{
               required
             />
             <Input
-              label="CMV Unitário (R$)"
+              label="Custo Unitário (R$)"
               type="number"
               step="0.1"
               value={prodForm.unitCost}
@@ -1993,8 +2254,8 @@ export const AdminWorkspace: React.FC<{
             onChange={(e) => setProdForm({ ...prodForm, regulatoryInfo: e.target.value })}
           />
           <FileUploader
-            label="Anexar Laudo Técnico / Dossiê RDC"
-            onUpload={(fn) => onNotify(`Arquivo ${fn} vinculado ao dossiê!`, 'info')}
+            label="Anexar Documento / Laudo do Produto"
+            onUpload={(fn) => onNotify(`Arquivo ${fn} anexado ao produto!`, 'info')}
           />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setProductModalOpen(false)}>
@@ -2008,12 +2269,12 @@ export const AdminWorkspace: React.FC<{
       <Modal
         open={offerModalOpen}
         onClose={() => setOfferModalOpen(false)}
-        title="Offer Engine — Criar Nova Condição Comercial"
+        title="Nova Oferta Comercial"
       >
         <form onSubmit={handleCreateOffer} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <Input
-              label="Código Curto do Link (/o/XXXX)"
+              label="Código do Link (/o/XXXX)"
               value={offerForm.code}
               onChange={(e) => setOfferForm({ ...offerForm, code: e.target.value.toUpperCase() })}
               required
@@ -2031,14 +2292,14 @@ export const AdminWorkspace: React.FC<{
             />
           </div>
           <Input
-            label="Título Comercial da Oferta"
+            label="Nome da Oferta"
             value={offerForm.name}
             onChange={(e) => setOfferForm({ ...offerForm, name: e.target.value })}
             required
           />
           <div className="grid grid-cols-2 gap-3">
             <Select
-              label="Produto Físico Principal"
+              label="Produto"
               value={offerForm.productId}
               onChange={(e) => setOfferForm({ ...offerForm, productId: e.target.value })}
               options={products.map((p) => ({ value: p.id, label: `${p.sku} - ${p.commercialName}` }))}
@@ -2053,7 +2314,7 @@ export const AdminWorkspace: React.FC<{
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Input
-              label="Preço Regular Ancoragem (R$)"
+              label="Preço Regular (R$)"
               type="number"
               step="0.1"
               value={offerForm.regularPrice}
@@ -2063,7 +2324,7 @@ export const AdminWorkspace: React.FC<{
               required
             />
             <Input
-              label="Preço Promocional da Oferta (R$)"
+              label="Preço Promocional (R$)"
               type="number"
               step="0.1"
               value={offerForm.promotionalPrice}
@@ -2074,25 +2335,16 @@ export const AdminWorkspace: React.FC<{
             />
           </div>
           <Select
-            label="Status Inicial no Compliance Gate"
-            value={offerForm.complianceStatus}
-            onChange={(e) =>
-              setOfferForm({
-                ...offerForm,
-                complianceStatus: e.target.value as ComplianceState,
-              })
-            }
-            options={[
-              { value: 'DRAFT', label: 'DRAFT (Bloqueado para publicação)' },
-              { value: 'UNDER_REVIEW', label: 'UNDER_REVIEW (Em análise)' },
-              { value: 'APPROVED', label: 'APPROVED (Aprovado pelo Compliance)' },
-            ]}
+            label="Campanha de Origem (Opcional)"
+            value={offerForm.campaignId}
+            onChange={(e) => setOfferForm({ ...offerForm, campaignId: e.target.value })}
+            options={campaigns.map((c) => ({ value: c.id, label: c.name }))}
           />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOfferModalOpen(false)}>
               Cancelar
             </Button>
-            <Button type="submit">Validar Margem & Criar Oferta</Button>
+            <Button type="submit">Criar Oferta</Button>
           </div>
         </form>
       </Modal>
@@ -2100,7 +2352,7 @@ export const AdminWorkspace: React.FC<{
       <Modal
         open={couponModalOpen}
         onClose={() => setCouponModalOpen(false)}
-        title="Criar Novo Cupom Comercial"
+        title="Novo Cupom de Desconto"
       >
         <form onSubmit={handleCreateCoupon} className="space-y-4">
           <Input

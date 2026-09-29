@@ -14,12 +14,15 @@ import {
   Link2,
   Lock,
   Menu,
+  Moon,
   Package,
   PackageCheck,
+  ShieldCheck,
   ShoppingBag,
   Sliders,
   Smartphone,
   Sparkles,
+  Sun,
   Tag,
   Truck,
   UserCheck,
@@ -27,13 +30,11 @@ import {
   Webhook,
   X,
   Zap,
-  ShieldCheck,
 } from 'lucide-react';
 import { AdminSection, AdminWorkspace } from './components/AdminWorkspace.tsx';
 import { SellerTab, SellerWorkspace } from './components/SellerWorkspace.tsx';
 import { PublicCustomerArea } from './components/PublicCustomerArea.tsx';
 import {
-  Badge,
   Button,
   Input,
   LoadingState,
@@ -88,22 +89,14 @@ interface BootstrapData {
 export default function App() {
   const [token, setToken] = useState<string>('tok_admin_demo');
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('ADMIN');
-  const [adminSection, setAdminSection] = useState<AdminSection>('DASHBOARD');
+  const [adminSection, setAdminSection] = useState<AdminSection>('VISAO_GERAL');
   const [sellerTab, setSellerTab] = useState<SellerTab>('DASHBOARD');
   const [publicOfferCode, setPublicOfferCode] = useState<string>('7XK29');
+  const [darkMode, setDarkMode] = useState<boolean>(false);
 
   const [data, setData] = useState<BootstrapData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
-  const [lightMode, setLightMode] = useState<boolean>(false);
-
-  useEffect(() => {
-    if (lightMode) {
-      document.documentElement.classList.add('theme-light');
-    } else {
-      document.documentElement.classList.remove('theme-light');
-    }
-  }, [lightMode]);
 
   // Login / Auth Modal State
   const [authModalOpen, setAuthModalOpen] = useState<boolean>(false);
@@ -116,6 +109,14 @@ export default function App() {
     message: string;
     type: 'success' | 'error' | 'info';
   } | null>(null);
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
 
   const notify = useCallback(
     (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -164,9 +165,9 @@ export default function App() {
     setWorkspaceMode(mode);
     setLoginEmail(defaultEmail);
     if (mode === 'FULFILLMENT') {
-      setAdminSection('FULFILLMENT');
+      setAdminSection('ENTREGAS');
     } else if (mode === 'ADMIN') {
-      setAdminSection('DASHBOARD');
+      setAdminSection('VISAO_GERAL');
     }
     await fetchBootstrap(newToken);
     notify(`Ambiente ativo: ${mode}`, 'info');
@@ -216,94 +217,47 @@ export default function App() {
     }
   };
 
-  const adminMenuGroups: {
-    group: string;
-    items: { id: AdminSection; num: string; label: string; icon: React.ReactNode }[];
-  }[] = [
-    {
-      group: 'Estratégia & Motor',
-      items: [
-        { id: 'DASHBOARD', num: '01', label: 'Visão & Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
-        { id: 'PRODUTOS', num: '02', label: 'Catálogo & SKUs', icon: <Package className="w-4 h-4" /> },
-        { id: 'DOCUMENTACAO', num: '03', label: 'Dossiê & Rotulagem', icon: <FileText className="w-4 h-4" /> },
-        { id: 'OFERTAS', num: '04', label: 'Motor de Ofertas', icon: <Sparkles className="w-4 h-4" /> },
-        { id: 'COMBOS', num: '05', label: 'Kits & Combos', icon: <Layers className="w-4 h-4" /> },
-        { id: 'CUPONS', num: '06', label: 'Cupons & Regras', icon: <Tag className="w-4 h-4" /> },
-        { id: 'CAMPANHAS', num: '07', label: 'Campanhas & UTMs', icon: <Activity className="w-4 h-4" /> },
-      ],
-    },
-    {
-      group: 'Transação & Operação',
-      items: [
-        { id: 'PEDIDOS', num: '08', label: 'Pedidos (#LC-XXXXX)', icon: <ShoppingBag className="w-4 h-4" /> },
-        { id: 'PAGAMENTOS', num: '09', label: 'Pagamentos & Conciliação', icon: <CreditCard className="w-4 h-4" /> },
-        { id: 'FULFILLMENT', num: '10', label: 'Fulfillment WMS', icon: <PackageCheck className="w-4 h-4" /> },
-        { id: 'LOGISTICA', num: '11', label: 'Frete & Exceções', icon: <Truck className="w-4 h-4" /> },
-      ],
-    },
-    {
-      group: 'Relacionamento & CRM',
-      items: [
-        { id: 'CRM', num: '12', label: 'Pipeline CRM', icon: <FolderKanban className="w-4 h-4" /> },
-        { id: 'LEADS', num: '13', label: 'Leads & Interações', icon: <Users className="w-4 h-4" /> },
-        { id: 'CLIENTES', num: '14', label: 'Clientes & LGPD', icon: <UserCheck className="w-4 h-4" /> },
-        { id: 'AUTOMACOES', num: '15', label: 'Pós-Venda & Recuperação', icon: <Zap className="w-4 h-4" /> },
-        { id: 'VENDEDORES', num: '16', label: 'Vendedores & Atribuição', icon: <Users className="w-4 h-4" /> },
-        { id: 'COMISSOES', num: '17', label: 'Comissões Congeladas', icon: <DollarSign className="w-4 h-4" /> },
-      ],
-    },
-    {
-      group: 'Controle & Governança',
-      items: [
-        { id: 'ANALYTICS', num: '18', label: 'Analytics & Funil', icon: <BarChart3 className="w-4 h-4" /> },
-        { id: 'ECONOMIA', num: '19', label: 'Economia Unitária', icon: <Calculator className="w-4 h-4" /> },
-        { id: 'COMPLIANCE', num: '20', label: 'Compliance Gate', icon: <ClipboardCheck className="w-4 h-4" /> },
-        { id: 'AUDITORIA', num: '21', label: 'Auditoria & Logs', icon: <ShieldCheck className="w-4 h-4" /> },
-        { id: 'USUARIOS', num: '22', label: 'Usuários & 2FA', icon: <KeyRound className="w-4 h-4" /> },
-        { id: 'PERMISSOES', num: '23', label: 'Permissões RBAC', icon: <Lock className="w-4 h-4" /> },
-        { id: 'INTEGRACOES', num: '24', label: 'Integrações & Decisões', icon: <Webhook className="w-4 h-4" /> },
-        { id: 'CONFIGURACOES', num: '25', label: 'Configurações', icon: <Sliders className="w-4 h-4" /> },
-      ],
-    },
+  // Navegação Administrativa Enxuta (7 Áreas Essenciais)
+  const adminMenuItems: { id: AdminSection; label: string; icon: React.ReactNode }[] = [
+    { id: 'VISAO_GERAL', label: 'Visão Geral', icon: <LayoutDashboard className="w-4 h-4" /> },
+    { id: 'PRODUTOS', label: 'Produtos', icon: <Package className="w-4 h-4" /> },
+    { id: 'VENDAS', label: 'Vendas', icon: <ShoppingBag className="w-4 h-4" /> },
+    { id: 'CLIENTES', label: 'Clientes', icon: <UserCheck className="w-4 h-4" /> },
+    { id: 'ENTREGAS', label: 'Entregas', icon: <Truck className="w-4 h-4" /> },
+    { id: 'VENDEDORES', label: 'Vendedores', icon: <Users className="w-4 h-4" /> },
+    { id: 'CONFIGURACOES', label: 'Configurações', icon: <Sliders className="w-4 h-4" /> },
   ];
 
-  const sellerMenuItems: { id: SellerTab; num: string; label: string; icon: React.ReactNode }[] = [
-    { id: 'DASHBOARD', num: '01', label: 'Visão Comercial', icon: <LayoutDashboard className="w-4 h-4" /> },
-    { id: 'LEADS', num: '02', label: 'Meus Leads', icon: <Users className="w-4 h-4" /> },
-    { id: 'CLIENTES', num: '03', label: 'Clientes da Carteira', icon: <UserCheck className="w-4 h-4" /> },
-    { id: 'OFERTAS', num: '04', label: 'Ofertas Autorizadas', icon: <Sparkles className="w-4 h-4" /> },
-    { id: 'CRIAR_LINK', num: '05', label: 'Gerar Link (/o/...)', icon: <Link2 className="w-4 h-4" /> },
-    { id: 'PEDIDOS', num: '06', label: 'Pedidos & Atendimento', icon: <ShoppingBag className="w-4 h-4" /> },
-    { id: 'COMISSOES', num: '07', label: 'Minhas Comissões', icon: <DollarSign className="w-4 h-4" /> },
-    { id: 'HISTORICO', num: '08', label: 'Histórico de Vendas', icon: <FileText className="w-4 h-4" /> },
+  const sellerMenuItems: { id: SellerTab; label: string; icon: React.ReactNode }[] = [
+    { id: 'DASHBOARD', label: 'Visão Geral', icon: <LayoutDashboard className="w-4 h-4" /> },
+    { id: 'OFERTAS', label: 'Ofertas & Links', icon: <Link2 className="w-4 h-4" /> },
+    { id: 'PEDIDOS', label: 'Pedidos', icon: <ShoppingBag className="w-4 h-4" /> },
+    { id: 'CLIENTES', label: 'Clientes', icon: <UserCheck className="w-4 h-4" /> },
+    { id: 'LEADS', label: 'Atendimentos', icon: <Users className="w-4 h-4" /> },
+    { id: 'COMISSOES', label: 'Comissões', icon: <DollarSign className="w-4 h-4" /> },
   ];
 
   return (
-    <div className="min-h-screen text-[#f4f7f9] flex">
-      {/* FIXED SIDEBAR — Exact match with .side in the Blueprint HTML */}
+    <div className="min-h-screen text-[var(--text-primary)] flex">
+      {/* SLEEK MODERN SIDEBAR */}
       {workspaceMode !== 'PUBLIC_CUSTOMER' && (
         <aside
           className={`${
             mobileSidebarOpen ? 'fixed inset-y-0 left-0 z-50 block' : 'hidden'
-          } lg:block w-[270px] modern-sidebar shrink-0 h-screen sticky top-0 overflow-y-auto px-3.5 py-5`}
+          } lg:block w-[264px] modern-sidebar shrink-0 h-screen sticky top-0 overflow-y-auto px-3.5 py-5`}
         >
           <div className="flex items-center justify-between px-2.5 pb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-[38px] h-[38px] rounded-[12px] bg-gradient-to-br from-indigo-500 to-violet-600 text-white grid place-items-center font-black text-[19px] shadow-[0_0_24px_rgba(99,102,241,0.45)]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white grid place-items-center font-extrabold text-base shadow-[0_6px_16px_rgba(79,70,229,0.35)]">
                 L
               </div>
-              <div>
-                <b className="block text-sm font-extrabold tracking-tight text-[#f4f7f9]">
-                  Leal Caps
-                </b>
-                <small className="block text-[10px] text-[#8f9aaa]">
-                  Sales &amp; Fulfillment Platform
-                </small>
-              </div>
+              <span className="text-base font-extrabold tracking-tight text-[var(--text-primary)]">
+                Leal Caps
+              </span>
             </div>
             <button
               onClick={() => setMobileSidebarOpen(false)}
-              className="lg:hidden text-[#8f9aaa] hover:text-white"
+              className="lg:hidden text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             >
               <X className="w-4 h-4" />
             </button>
@@ -311,8 +265,8 @@ export default function App() {
 
           {workspaceMode === 'VENDEDOR' ? (
             <div className="space-y-1">
-              <div className="text-[9px] font-bold tracking-[0.14em] uppercase text-[#596576] px-2.5 pt-2 pb-1.5">
-                Máquina Comercial
+              <div className="text-[11px] font-semibold text-[var(--text-muted)] px-3 pt-2 pb-1.5">
+                Operação Comercial
               </div>
               {sellerMenuItems.map((item) => {
                 const active = sellerTab === item.id;
@@ -323,59 +277,57 @@ export default function App() {
                       setSellerTab(item.id);
                       setMobileSidebarOpen(false);
                     }}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-[10px] text-xs transition-all cursor-pointer ${
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs transition-all cursor-pointer whitespace-nowrap ${
                       active
-                        ? 'bg-[#111821] text-[#f4f7f9] font-semibold shadow-[inset_2.5px_0_0_#bdf35d]'
-                        : 'text-[#aeb8c6] hover:bg-[#111821]/60 hover:text-[#f4f7f9]'
+                        ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-semibold'
+                        : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]'
                     }`}
                   >
                     <span className="flex items-center gap-2.5">
-                      <span className={active ? 'text-[#bdf35d]' : 'text-[#697587]'}>
+                      <span className={active ? 'text-indigo-600 dark:text-indigo-400' : 'text-[var(--text-muted)]'}>
                         {item.icon}
                       </span>
-                      <span>
-                        {item.num} · {item.label}
-                      </span>
+                      <span>{item.label}</span>
                     </span>
                   </button>
                 );
               })}
             </div>
           ) : (
-            <div className="space-y-4">
-              {adminMenuGroups.map((grp) => (
-                <div key={grp.group} className="space-y-0.5">
-                  <div className="text-[9px] font-bold tracking-[0.14em] uppercase text-[#596576] px-2.5 pt-2 pb-1.5">
-                    {grp.group}
-                  </div>
-                  {grp.items.map((item) => {
-                    const active = adminSection === item.id;
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => {
-                          setAdminSection(item.id);
-                          setMobileSidebarOpen(false);
-                        }}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-[10px] text-[11.5px] transition-all cursor-pointer ${
+            <div className="space-y-1">
+              <div className="text-[11px] font-semibold text-[var(--text-muted)] px-3 pt-2 pb-1.5">
+                Menu Principal
+              </div>
+              {adminMenuItems.map((item) => {
+                const active = adminSection === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setAdminSection(item.id);
+                      setMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs transition-all cursor-pointer whitespace-nowrap ${
+                      active
+                        ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-semibold'
+                        : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <span
+                        className={
                           active
-                            ? 'bg-[#111821] text-[#f4f7f9] font-semibold shadow-[inset_2.5px_0_0_#bdf35d]'
-                            : 'text-[#aeb8c6] hover:bg-[#111821]/60 hover:text-[#f4f7f9]'
-                        }`}
+                            ? 'text-indigo-600 dark:text-indigo-400'
+                            : 'text-[var(--text-muted)]'
+                        }
                       >
-                        <span className="flex items-center gap-2.5">
-                          <span className={active ? 'text-[#bdf35d]' : 'text-[#697587]'}>
-                            {item.icon}
-                          </span>
-                          <span>
-                            {item.num} · {item.label}
-                          </span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
+                        {item.icon}
+                      </span>
+                      <span>{item.label}</span>
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           )}
         </aside>
@@ -383,112 +335,101 @@ export default function App() {
 
       {/* MAIN AREA */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* TOP GLASSMORPHIC HEADER (.top in the HTML) */}
-        <header className="h-[68px] modern-glass-header px-4 lg:px-8 flex items-center justify-between sticky top-0 z-40 gap-4">
-          <div className="flex items-center gap-3">
+        {/* TOP BAR CONTRACT: 3 ZONES (Brand | Segmented Workspace Nav | Theme + Session Actions) */}
+        <header className="h-16 modern-glass-header px-4 lg:px-8 flex items-center justify-between sticky top-0 z-40 gap-4">
+          {/* Zone 1: Brand Title */}
+          <div className="flex items-center gap-3 shrink-0">
             {workspaceMode !== 'PUBLIC_CUSTOMER' && (
               <button
                 onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
-                className="lg:hidden p-2 rounded-xl bg-[#111821] text-[#8f9aaa] hover:text-white cursor-pointer"
+                className="lg:hidden p-2 rounded-xl bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
               >
                 <Menu className="w-5 h-5" />
               </button>
             )}
-            {workspaceMode === 'PUBLIC_CUSTOMER' && (
-              <div className="flex items-center gap-2.5 mr-2">
-                <div className="w-8 h-8 rounded-[10px] bg-[#bdf35d] text-[#081007] grid place-items-center font-black text-base">
-                  L
-                </div>
-              </div>
-            )}
-            <div className="text-[11px] text-[#8f9aaa] tracking-wide">
-              <b className="text-[#f4f7f9] font-bold">LEAL CAPS</b> /{' '}
-              <span className="uppercase">
-                {workspaceMode === 'PUBLIC_CUSTOMER'
-                  ? `CHECKOUT OFICIAL (/o/${publicOfferCode})`
-                  : workspaceMode === 'VENDEDOR'
-                    ? `COMERCIAL · ${sellerTab}`
-                    : `${workspaceMode} · ${adminSection}`}
-              </span>
-            </div>
+            <span className="text-base font-extrabold tracking-tight text-[var(--text-primary)] whitespace-nowrap">
+              Leal Caps
+            </span>
           </div>
 
-          {/* Environment & Role Switcher Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto py-1">
-            <div className="flex items-center bg-[#0d1218] p-1 rounded-full border border-[#222c38] gap-1">
-              <button
-                onClick={() =>
-                  handleSwitchProfile('tok_admin_demo', 'ADMIN', 'admin@lealcaps.com.br')
-                }
-                className={`px-3 py-1.5 rounded-full text-[11px] font-bold cursor-pointer transition-all ${
-                  workspaceMode === 'ADMIN'
-                    ? 'bg-[#bdf35d] text-[#081007] shadow-[0_0_16px_rgba(189,243,93,0.35)]'
-                    : 'text-[#8f9aaa] hover:text-white'
-                }`}
-              >
-                Admin
-              </button>
-              <button
-                onClick={() =>
-                  handleSwitchProfile('tok_seller1_demo', 'VENDEDOR', 'camila@lealcaps.com.br')
-                }
-                className={`px-3 py-1.5 rounded-full text-[11px] font-bold cursor-pointer transition-all ${
-                  workspaceMode === 'VENDEDOR' && token === 'tok_seller1_demo'
-                    ? 'bg-[#65dbff] text-[#06131a] shadow-[0_0_16px_rgba(101,219,255,0.35)]'
-                    : 'text-[#8f9aaa] hover:text-white'
-                }`}
-              >
-                Vendedor (Camila)
-              </button>
-              <button
-                onClick={() =>
-                  handleSwitchProfile('tok_seller2_demo', 'VENDEDOR', 'rafael@lealcaps.com.br')
-                }
-                className={`px-3 py-1.5 rounded-full text-[11px] font-bold cursor-pointer transition-all ${
-                  workspaceMode === 'VENDEDOR' && token === 'tok_seller2_demo'
-                    ? 'bg-[#65dbff] text-[#06131a] shadow-[0_0_16px_rgba(101,219,255,0.35)]'
-                    : 'text-[#8f9aaa] hover:text-white'
-                }`}
-              >
-                Vendedor (Rafael)
-              </button>
-              <button
-                onClick={() =>
-                  handleSwitchProfile(
-                    'tok_fulfillment_demo',
-                    'FULFILLMENT',
-                    'logistica@lealcaps.com.br'
-                  )
-                }
-                className={`px-3 py-1.5 rounded-full text-[11px] font-bold cursor-pointer transition-all ${
-                  workspaceMode === 'FULFILLMENT'
-                    ? 'bg-[#ffbd67] text-[#170e02] shadow-[0_0_16px_rgba(255,189,103,0.35)]'
-                    : 'text-[#8f9aaa] hover:text-white'
-                }`}
-              >
-                Fulfillment
-              </button>
-              <button
-                onClick={() => setWorkspaceMode('PUBLIC_CUSTOMER')}
-                className={`px-3 py-1.5 rounded-full text-[11px] font-bold cursor-pointer transition-all flex items-center gap-1.5 ${
-                  workspaceMode === 'PUBLIC_CUSTOMER'
-                    ? 'bg-[#49dfa0] text-[#05140d] shadow-[0_0_16px_rgba(73,223,160,0.35)]'
-                    : 'text-[#8f9aaa] hover:text-white'
-                }`}
-              >
-                <Smartphone className="w-3.5 h-3.5" />
-                Checkout (/o/{publicOfferCode})
-              </button>
-            </div>
+          {/* Zone 2: Segmented Workspace & Role Controls */}
+          <nav className="flex items-center bg-[var(--bg-subtle)] p-1 rounded-xl border border-[var(--border-subtle)] gap-1 overflow-x-auto">
+            <button
+              onClick={() =>
+                handleSwitchProfile('tok_admin_demo', 'ADMIN', 'admin@lealcaps.com.br')
+              }
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all whitespace-nowrap ${
+                workspaceMode === 'ADMIN'
+                  ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              Admin
+            </button>
+            <button
+              onClick={() =>
+                handleSwitchProfile('tok_seller1_demo', 'VENDEDOR', 'camila@lealcaps.com.br')
+              }
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all whitespace-nowrap ${
+                workspaceMode === 'VENDEDOR' && token === 'tok_seller1_demo'
+                  ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              Vendedor (Camila)
+            </button>
+            <button
+              onClick={() =>
+                handleSwitchProfile('tok_seller2_demo', 'VENDEDOR', 'rafael@lealcaps.com.br')
+              }
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all whitespace-nowrap ${
+                workspaceMode === 'VENDEDOR' && token === 'tok_seller2_demo'
+                  ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              Vendedor (Rafael)
+            </button>
+            <button
+              onClick={() =>
+                handleSwitchProfile(
+                  'tok_fulfillment_demo',
+                  'FULFILLMENT',
+                  'logistica@lealcaps.com.br'
+                )
+              }
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all whitespace-nowrap ${
+                workspaceMode === 'FULFILLMENT'
+                  ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              Fulfillment
+            </button>
+            <button
+              onClick={() => setWorkspaceMode('PUBLIC_CUSTOMER')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                workspaceMode === 'PUBLIC_CUSTOMER'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              Checkout (/o/{publicOfferCode})
+            </button>
+          </nav>
 
+          {/* Zone 3: Theme Switcher & Session Action */}
+          <div className="flex items-center gap-2 shrink-0">
             <Button
               variant="secondary"
               size="xs"
-              onClick={() => setLightMode(!lightMode)}
+              icon={darkMode ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-indigo-600" />}
+              onClick={() => setDarkMode(!darkMode)}
+              title="Alternar Tema Claro / Escuro"
             >
-              {lightMode ? 'Modo Escuro' : 'Modo Claro'}
+              {darkMode ? 'Modo Claro' : 'Modo Escuro'}
             </Button>
-
             <Button
               variant="secondary"
               size="xs"
@@ -514,7 +455,7 @@ export default function App() {
             onOrderCreatedOrUpdated={() => fetchBootstrap(token)}
           />
         ) : (
-          <main className="flex-1 max-w-[1450px] w-full mx-auto p-5 lg:p-8">
+          <main className="flex-1 max-w-[1440px] w-full mx-auto p-5 lg:p-8">
             {loading || !data ? (
               <LoadingState message="Carregando infraestrutura Leal Caps..." />
             ) : workspaceMode === 'VENDEDOR' ? (
@@ -539,15 +480,15 @@ export default function App() {
                 onNotify={notify}
               />
             ) : workspaceMode === 'FULFILLMENT' &&
-              !['FULFILLMENT', 'LOGISTICA', 'PEDIDOS'].includes(adminSection) ? (
+              !['ENTREGAS', 'VENDAS', 'FULFILLMENT', 'LOGISTICA', 'PEDIDOS'].includes(adminSection) ? (
               <div className="space-y-4">
                 <PermissionDeniedState
                   role="FULFILLMENT"
-                  requiredRole="ADMIN (Ou acesse os módulos Fulfillment WMS / Frete & Exceções / Pedidos)"
+                  requiredRole="ADMIN (Acesso restrito a Entregas e Pedidos)"
                 />
                 <div className="flex justify-center">
-                  <Button onClick={() => setAdminSection('FULFILLMENT')}>
-                    Abrir Fila de Fulfillment WMS
+                  <Button onClick={() => setAdminSection('ENTREGAS')}>
+                    Ir para Central de Entregas
                   </Button>
                 </div>
               </div>
@@ -623,8 +564,10 @@ export default function App() {
             </>
           )}
 
-          <div className="bg-[#080d13] border border-[#222c38] rounded-xl p-3.5 text-xs text-[#8f9aaa] space-y-1">
-            <div className="text-[#bdf35d] font-bold mb-1">Acessos Rápidos Configurados:</div>
+          <div className="bg-[var(--bg-subtle)] border border-[var(--border-subtle)] rounded-xl p-3.5 text-xs text-[var(--text-secondary)] space-y-1">
+            <div className="text-indigo-600 dark:text-indigo-400 font-bold mb-1">
+              Credenciais Operacionais Configuradas:
+            </div>
             <div>• Admin: admin@lealcaps.com.br / LealAdmin#2026</div>
             <div>• Vendedor 1: camila@lealcaps.com.br / Vendedor#2026</div>
             <div>• Vendedor 2: rafael@lealcaps.com.br / Vendedor#2026</div>
@@ -651,7 +594,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setRecoveryMode(!recoveryMode)}
-              className="text-[#65dbff] hover:underline cursor-pointer"
+              className="text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
             >
               {recoveryMode ? '← Voltar para o Login' : 'Esqueceu a senha? Recuperar acesso'}
             </button>
