@@ -29,11 +29,12 @@ import {
 } from 'lucide-react';
 import {
   Badge,
-  BarChartSimple,
   Button,
   Card,
   EmptyState,
   FileUploader,
+  formatCurrencyBRL,
+  formatOrderDateTimeBR,
   Input,
   KPI,
   Modal,
@@ -479,16 +480,46 @@ export const AdminWorkspace: React.FC<{
   const totalAttentionCount =
     awaitingPreparationOrders.length + exceptionOrders.length + pendingComplianceOffers.length;
   const deliveredOrdersCount = orders.filter((o) => o.operationalStatus === 'delivered').length;
+  const inProgressOrdersCount = orders.filter(
+    (o) =>
+      o.financialStatus === 'approved' &&
+      ['waiting', 'picking', 'packing', 'ready_to_ship', 'shipped'].includes(
+        o.operationalStatus
+      )
+  ).length;
 
-  const getOrderQuickStatus = (ord: Order): { label: string; tone: 'emerald' | 'cyan' | 'amber' | 'danger' | 'lime' | 'slate' } => {
+  const attentionSummaryParts: string[] = [];
+  if (awaitingPreparationOrders.length > 0) {
+    attentionSummaryParts.push(`${awaitingPreparationOrders.length} para enviar`);
+  }
+  if (exceptionOrders.length > 0) {
+    attentionSummaryParts.push(`${exceptionOrders.length} com problema`);
+  }
+  if (pendingComplianceOffers.length > 0) {
+    attentionSummaryParts.push(
+      `${pendingComplianceOffers.length} ${
+        pendingComplianceOffers.length === 1 ? 'oferta para revisar' : 'ofertas para revisar'
+      }`
+    );
+  }
+  const attentionSubvalue =
+    attentionSummaryParts.length > 0 ? attentionSummaryParts.join(' · ') : 'Nenhuma pendência agora';
+
+  const getOrderQuickStatus = (
+    ord: Order
+  ): { label: string; tone: 'emerald' | 'cyan' | 'amber' | 'danger' | 'lime' | 'slate' } => {
     if (ord.financialStatus === 'pending') return { label: 'Pendente', tone: 'amber' };
     if (ord.financialStatus === 'refunded') return { label: 'Reembolsado', tone: 'slate' };
-    if (ord.financialStatus === 'cancelled') return { label: 'Cancelado', tone: 'danger' };
+    if (ord.financialStatus === 'declined' || ord.financialStatus === 'chargeback') {
+      return { label: 'Cancelado', tone: 'danger' };
+    }
     if (ord.operationalStatus === 'delivered') return { label: 'Pago · Entregue', tone: 'emerald' };
-    if (ord.operationalStatus === 'shipped' || ord.operationalStatus === 'in_transit') {
+    if (ord.operationalStatus === 'shipped') {
       return { label: 'Pago · Enviando', tone: 'cyan' };
     }
-    if (ord.operationalStatus === 'exception') return { label: 'Pago · Problema', tone: 'danger' };
+    if (ord.operationalStatus === 'exception' || ord.operationalStatus === 'returned') {
+      return { label: 'Pago · Problema', tone: 'danger' };
+    }
     return { label: 'Pago · Preparando', tone: 'lime' };
   };
 
@@ -522,50 +553,59 @@ export const AdminWorkspace: React.FC<{
             </Button>
           </div>
 
-          {/* 4 KPIs curtos e diretos: Vendas, Pedidos, A Receber, Atenção */}
+          {/* 4 KPIs curtos, sóbrios e sem duplicação */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <KPI
               label="Vendas"
-              value={`R$ ${grossSales.toFixed(2)}`}
-              subvalue={`${approvedOrders.length} pagos · Ticket médio R$ ${avgTicket.toFixed(2)}`}
+              value={formatCurrencyBRL(grossSales)}
+              subvalue={`${approvedOrders.length} ${
+                approvedOrders.length === 1 ? 'pago' : 'pagos'
+              } · Ticket médio ${formatCurrencyBRL(avgTicket)}`}
               accent="emerald"
               icon={<DollarSign className="w-4 h-4" />}
             />
             <KPI
               label="Pedidos"
-              value={`${orders.length} pedidos`}
-              subvalue={`${approvedOrders.length} pagos · ${deliveredOrdersCount} entregues`}
+              value={orders.length}
+              subvalue={`${deliveredOrdersCount} ${
+                deliveredOrdersCount === 1 ? 'entregue' : 'entregues'
+              } · ${inProgressOrdersCount} em andamento`}
               accent="lime"
               icon={<Package className="w-4 h-4" />}
             />
             <KPI
               label="A Receber"
-              value={`R$ ${receivablePending.toFixed(2)}`}
-              subvalue={`${pendingPaymentOrders.length} pendentes`}
+              value={formatCurrencyBRL(receivablePending)}
+              subvalue={`${pendingPaymentOrders.length} ${
+                pendingPaymentOrders.length === 1 ? 'pendente' : 'pendentes'
+              }`}
               accent="cyan"
               icon={<CreditCard className="w-4 h-4" />}
             />
             <KPI
               label="Atenção"
               value={totalAttentionCount}
-              subvalue={`${awaitingPreparationOrders.length} para enviar · ${exceptionOrders.length} com problema`}
-              accent={exceptionOrders.length > 0 ? 'danger' : 'amber'}
+              subvalue={attentionSubvalue}
+              accent={totalAttentionCount > 0 ? 'danger' : 'lime'}
               icon={<AlertTriangle className="w-4 h-4" />}
             />
           </div>
 
-          {/* 2. Bloco enxuto: Precisa da sua atenção */}
-          <Card title="Precisa da sua atenção">
+          {/* 2. Bloco operacional compacto: Precisa da sua atenção */}
+          <div className="modern-card rounded-2xl p-5 sm:p-6">
+            <h3 className="text-base font-bold text-[var(--text-primary)] tracking-tight mb-3">
+              Precisa da sua atenção
+            </h3>
             {totalAttentionCount === 0 ? (
-              <div className="py-3 text-sm text-[var(--text-secondary)] flex items-center gap-2">
+              <div className="py-1 text-sm text-[var(--text-secondary)] flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                 <span>Nenhuma pendência operacional no momento.</span>
               </div>
             ) : (
-              <div className="divide-y divide-[var(--border-subtle)] -my-2">
+              <div className="space-y-2 max-w-2xl">
                 {awaitingPreparationOrders.length > 0 && (
-                  <div className="py-3.5 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 text-sm text-[var(--text-primary)]">
+                  <div className="py-2.5 px-3.5 rounded-xl bg-[var(--bg-subtle)]/60 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-2.5 text-sm text-[var(--text-primary)]">
                       <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
                       <span>
                         <strong className="font-semibold">{awaitingPreparationOrders.length}</strong>{' '}
@@ -589,8 +629,8 @@ export const AdminWorkspace: React.FC<{
                 )}
 
                 {exceptionOrders.length > 0 && (
-                  <div className="py-3.5 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 text-sm text-[var(--text-primary)]">
+                  <div className="py-2.5 px-3.5 rounded-xl bg-rose-500/[0.06] flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-2.5 text-sm text-[var(--text-primary)]">
                       <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
                       <span>
                         <strong className="font-semibold text-rose-600 dark:text-rose-400">
@@ -616,8 +656,8 @@ export const AdminWorkspace: React.FC<{
                 )}
 
                 {pendingComplianceOffers.length > 0 && (
-                  <div className="py-3.5 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 text-sm text-[var(--text-primary)]">
+                  <div className="py-2.5 px-3.5 rounded-xl bg-[var(--bg-subtle)]/60 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-2.5 text-sm text-[var(--text-primary)]">
                       <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
                       <span>
                         <strong className="font-semibold">{pendingComplianceOffers.length}</strong>{' '}
@@ -641,9 +681,9 @@ export const AdminWorkspace: React.FC<{
                 )}
               </div>
             )}
-          </Card>
+          </div>
 
-          {/* 3. Pedidos recentes (4 colunas limpas: Pedido, Cliente, Status, Valor) */}
+          {/* 3. Pedidos recentes (4 colunas limpas: Pedido + Data/Hora, Cliente, Status, Valor BRL) */}
           <Card
             title="Pedidos recentes"
             action={
@@ -660,47 +700,59 @@ export const AdminWorkspace: React.FC<{
               </button>
             }
           >
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-[var(--border-subtle)] text-xs text-[var(--text-secondary)]">
-                    <th className="py-3 px-3 font-semibold">Pedido</th>
-                    <th className="py-3 px-3 font-semibold">Cliente</th>
-                    <th className="py-3 px-3 font-semibold">Status</th>
-                    <th className="py-3 px-3 text-right font-semibold">Valor</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--border-subtle)]">
-                  {orders.slice(0, 6).map((ord) => {
-                    const quickStatus = getOrderQuickStatus(ord);
-                    return (
-                      <tr
-                        key={ord.id}
-                        onClick={() => {
-                          setSelectedOrder(ord);
-                          setSection('VENDAS');
-                          setSalesTab('PEDIDOS');
-                        }}
-                        className="hover:bg-[var(--bg-subtle)]/60 cursor-pointer transition-colors"
-                      >
-                        <td className="py-3.5 px-3 font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                          {ord.orderNumber}
-                        </td>
-                        <td className="py-3.5 px-3 font-medium text-[var(--text-primary)]">
-                          {ord.customerSnapshot.name}
-                        </td>
-                        <td className="py-3.5 px-3">
-                          <Badge tone={quickStatus.tone}>{quickStatus.label}</Badge>
-                        </td>
-                        <td className="py-3.5 px-3 text-right font-mono font-bold text-[var(--text-primary)] tabular-nums">
-                          R$ {ord.total.toFixed(2)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            {orders.length === 0 ? (
+              <EmptyState
+                title="Nenhum pedido ainda"
+                description="Quando uma venda acontecer, os pedidos recentes aparecerão aqui."
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--border-subtle)] text-xs text-[var(--text-secondary)]">
+                      <th className="py-3 px-3 font-semibold">Pedido</th>
+                      <th className="py-3 px-3 font-semibold">Cliente</th>
+                      <th className="py-3 px-3 font-semibold">Status</th>
+                      <th className="py-3 px-3 text-right font-semibold">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border-subtle)]">
+                    {orders.slice(0, 6).map((ord) => {
+                      const quickStatus = getOrderQuickStatus(ord);
+                      return (
+                        <tr
+                          key={ord.id}
+                          onClick={() => {
+                            setSelectedOrder(ord);
+                            setSection('VENDAS');
+                            setSalesTab('PEDIDOS');
+                          }}
+                          className="hover:bg-[var(--bg-subtle)]/60 cursor-pointer transition-colors"
+                        >
+                          <td className="py-3.5 px-3">
+                            <div className="font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                              {ord.orderNumber}
+                            </div>
+                            <div className="text-[11px] text-[var(--text-muted)] mt-0.5 tabular-nums">
+                              {formatOrderDateTimeBR(ord.createdAt)}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-3 font-medium text-[var(--text-primary)]">
+                            {ord.customerSnapshot.name}
+                          </td>
+                          <td className="py-3.5 px-3">
+                            <Badge tone={quickStatus.tone}>{quickStatus.label}</Badge>
+                          </td>
+                          <td className="py-3.5 px-3 text-right font-mono font-bold text-[var(--text-primary)] tabular-nums">
+                            {formatCurrencyBRL(ord.total)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Card>
         </div>
       )}

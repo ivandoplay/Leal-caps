@@ -149,6 +149,39 @@ export const Card: React.FC<{
   </div>
 );
 
+const brlCurrencyFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+});
+
+export const formatCurrencyBRL = (value: number): string => brlCurrencyFormatter.format(value);
+
+export const formatOrderDateTimeBR = (isoDate: string): string => {
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return '';
+  const now = new Date();
+  const isToday =
+    date.getDate() === now.getDate() &&
+    date.getMonth() === now.getMonth() &&
+    date.getFullYear() === now.getFullYear();
+
+  const timeStr = new Intl.DateTimeFormat('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+
+  if (isToday) {
+    return `Hoje, ${timeStr}`;
+  }
+
+  const dateStr = new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+  }).format(date);
+
+  return `${dateStr}, ${timeStr}`;
+};
+
 export const KPI: React.FC<{
   label: string;
   value: string | number;
@@ -157,34 +190,28 @@ export const KPI: React.FC<{
   accent?: 'lime' | 'cyan' | 'amber' | 'danger' | 'emerald';
   icon?: React.ReactNode;
 }> = ({ label, value, subvalue, accent = 'lime', icon }) => {
-  const iconAccent = {
-    lime: 'text-indigo-500 bg-indigo-500/10 border-indigo-500/20',
-    cyan: 'text-sky-500 bg-sky-500/10 border-sky-500/20',
-    amber: 'text-amber-500 bg-amber-500/10 border-amber-500/20',
-    danger: 'text-rose-500 bg-rose-500/10 border-rose-500/20',
-    emerald: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20',
-  }[accent];
+  const isCritical = accent === 'danger';
 
-  const valueAccent = {
-    lime: 'text-[var(--text-primary)]',
-    cyan: 'text-[var(--text-primary)]',
-    amber: 'text-amber-500',
-    danger: 'text-rose-500',
-    emerald: 'text-emerald-500',
-  }[accent];
+  const iconStyle = isCritical
+    ? 'text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/20'
+    : 'text-[var(--text-secondary)] bg-[var(--bg-subtle)] border-[var(--border-subtle)]';
+
+  const valueStyle = isCritical
+    ? 'text-rose-600 dark:text-rose-400'
+    : 'text-[var(--text-primary)]';
 
   return (
-    <div className="modern-card-interactive rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
+    <div className="modern-card rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-[var(--text-secondary)]">{label}</span>
         {icon && (
-          <span className={`w-8 h-8 rounded-xl border flex items-center justify-center ${iconAccent}`}>
+          <span className={`w-8 h-8 rounded-xl border flex items-center justify-center ${iconStyle}`}>
             {icon}
           </span>
         )}
       </div>
       <div
-        className={`mt-3 text-2xl sm:text-[26px] font-extrabold tracking-tight tabular-nums ${valueAccent}`}
+        className={`mt-3 text-2xl sm:text-[26px] font-extrabold tracking-tight tabular-nums ${valueStyle}`}
       >
         {value}
       </div>
