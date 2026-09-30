@@ -169,7 +169,7 @@ export const AdminWorkspace: React.FC<{
   })();
 
   // Contextual sub-tabs inside each of the 7 clean areas
-  const [productTab, setProductTab] = useState<'CATALOGO' | 'COMBOS' | 'COMPLIANCE'>('CATALOGO');
+  const [productTab, setProductTab] = useState<'CATALOGO' | 'COMBOS'>('CATALOGO');
   const [salesTab, setSalesTab] = useState<'PEDIDOS' | 'OFERTAS' | 'CUPONS_CAMPANHAS'>('OFERTAS');
   const [customerTab, setCustomerTab] = useState<'COMPRADORES' | 'LEADS'>('COMPRADORES');
   const [deliveryFilter, setDeliveryFilter] = useState<
@@ -190,29 +190,16 @@ export const AdminWorkspace: React.FC<{
   const [productStatusFilter, setProductStatusFilter] = useState<
     'ALL' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED'
   >('ALL');
-  const [productComplianceFilter, setProductComplianceFilter] = useState<
-    'ALL' | 'APPROVED' | 'PENDING_REVIEW' | 'MISSING_DOCS'
-  >('ALL');
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
-  const [productDetailTab, setProductDetailTab] = useState<'GERAL' | 'ROTULO' | 'DOCUMENTOS'>(
+  const [productDetailTab, setProductDetailTab] = useState<'GERAL' | 'COMPOSICAO'>(
     'GERAL'
   );
   const [quickStockValue, setQuickStockValue] = useState<number>(0);
   const [quickCostValue, setQuickCostValue] = useState<number>(0);
 
-  // Document & Claim Creation State inside Product Detail Drawer
-  const [newDocForm, setNewDocForm] = useState<{
-    title: string;
-    docType: ProductDocument['docType'];
-    version: string;
-  }>({
-    title: '',
-    docType: 'LAUDO_TECNICO',
-    version: 'v1.0',
-  });
+  // Benefit / Highlight Creation State inside Product Detail Drawer
   const [newClaimForm, setNewClaimForm] = useState({
     claimText: '',
-    regulatoryBasis: 'IN ANVISA nº 28/2018 - Anexo V',
   });
 
   // Product Create/Edit Modal
@@ -233,14 +220,12 @@ export const AdminWorkspace: React.FC<{
     unitCost: 15.0,
     stockQuantity: 500,
     status: 'ACTIVE' as Product['status'],
-    complianceStatus: 'DRAFT' as ComplianceState,
-    regulatoryInfo:
-      'Suplemento Alimentar notificado conforme exigência ANVISA vigente e IN 28/2018.',
-    warnings:
-      'ESTE PRODUTO NÃO É UM MEDICAMENTO. NÃO EXCEDER A RECOMENDAÇÃO DIÁRIA DE CONSUMO INDICADA NA EMBALAGEM. MANTENHA FORA DO ALCANCE DE CRIANÇAS.',
+    complianceStatus: 'APPROVED' as ComplianceState,
+    regulatoryInfo: 'Suplemento alimentar em cápsulas.',
+    warnings: 'Conservar ao abrigo da luz, calor e umidade.',
     usageInstructions: 'Ingerir 2 (duas) cápsulas ao dia ou conforme orientação profissional.',
-    restrictions: 'Uso adulto (>= 19 anos). Não deve ser consumido por gestantes, lactantes e crianças.',
-    labelingInfo: 'Rotulagem nutricional padrão ANVISA RDC 429/2020 e IN 75/2020. Não contém glúten.',
+    restrictions: ' Recomendado para adultos (>= 19 anos).',
+    labelingInfo: 'Não contém glúten.',
     documents: [] as ProductDocument[],
     approvedClaims: [] as ProductClaim[],
   });
@@ -283,7 +268,7 @@ export const AdminWorkspace: React.FC<{
 
   const openProductDetail = (
     prod: Product,
-    initialTab: 'GERAL' | 'ROTULO' | 'DOCUMENTOS' = 'GERAL'
+    initialTab: 'GERAL' | 'COMPOSICAO' = 'GERAL'
   ) => {
     setSelectedProductId(prod.id);
     setProductDetailTab(initialTab);
@@ -431,49 +416,10 @@ export const AdminWorkspace: React.FC<{
     }
   };
 
-  const handleAddProductDocument = async (e: React.FormEvent, prod: Product) => {
-    e.preventDefault();
-    if (!newDocForm.title.trim()) {
-      onNotify('Informe o título do documento ou laudo técnico.', 'error');
-      return;
-    }
-    const res = await fetch(`/api/products/${prod.id}/documents`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        title: newDocForm.title.trim(),
-        docType: newDocForm.docType,
-        version: newDocForm.version.trim() || 'v1.0',
-        status: 'VALID',
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      onNotify(data.error || 'Erro ao anexar documento.', 'error');
-    } else {
-      onNotify(`Documento "${data.document.title}" anexado ao produto ${prod.sku}!`, 'success');
-      setNewDocForm({ title: '', docType: 'LAUDO_TECNICO', version: 'v1.0' });
-      onRefresh();
-    }
-  };
-
-  const handleRemoveProductDocument = async (prodId: string, docId: string) => {
-    const res = await fetch(`/api/products/${prodId}/documents/${docId}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.ok) {
-      onNotify('Documento removido do produto.', 'info');
-      onRefresh();
-    } else {
-      onNotify('Não foi possível remover o documento.', 'error');
-    }
-  };
-
   const handleAddProductClaim = async (e: React.FormEvent, prod: Product) => {
     e.preventDefault();
     if (!newClaimForm.claimText.trim()) {
-      onNotify('Informe o texto da alegação funcional autorizada.', 'error');
+      onNotify('Informe o texto do benefício do produto.', 'error');
       return;
     }
     const res = await fetch(`/api/products/${prod.id}/claims`, {
@@ -481,16 +427,16 @@ export const AdminWorkspace: React.FC<{
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({
         claimText: newClaimForm.claimText.trim(),
-        regulatoryBasis: newClaimForm.regulatoryBasis.trim() || 'IN ANVISA nº 28/2018 - Anexo V',
+        regulatoryBasis: 'Catálogo Comercial',
         status: 'APPROVED',
       }),
     });
     const data = await res.json();
     if (!res.ok) {
-      onNotify(data.error || 'Erro ao adicionar alegação.', 'error');
+      onNotify(data.error || 'Erro ao adicionar benefício.', 'error');
     } else {
-      onNotify('Alegação funcional adicionada ao produto!', 'success');
-      setNewClaimForm({ claimText: '', regulatoryBasis: 'IN ANVISA nº 28/2018 - Anexo V' });
+      onNotify('Benefício adicionado ao produto!', 'success');
+      setNewClaimForm({ claimText: '' });
       onRefresh();
     }
   };
@@ -501,7 +447,7 @@ export const AdminWorkspace: React.FC<{
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.ok) {
-      onNotify('Alegação removida do produto.', 'info');
+      onNotify('Benefício removido do produto.', 'info');
       onRefresh();
     }
   };
@@ -609,32 +555,6 @@ export const AdminWorkspace: React.FC<{
     }
   };
 
-  const handleUpdateCompliance = async (
-    review: ComplianceReview,
-    newStatus?: ComplianceState,
-    toggleKey?: keyof ComplianceReview['checklist']
-  ) => {
-    const nextChecklist = toggleKey
-      ? { ...review.checklist, [toggleKey]: !review.checklist[toggleKey] }
-      : review.checklist;
-
-    const res = await fetch(`/api/compliance/${review.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        checklist: nextChecklist,
-        status: newStatus || review.status,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      onNotify(data.error || 'Bloqueado pelo Compliance Gate.', 'error');
-    } else {
-      onNotify(`Compliance atualizado (${data.review.status}).`, 'success');
-      onRefresh();
-    }
-  };
-
   const handleSaveEconomicsConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     const res = await fetch('/api/economics/config', {
@@ -644,18 +564,6 @@ export const AdminWorkspace: React.FC<{
     });
     if (res.ok) {
       onNotify('Regras comerciais e limites de margem salvos!', 'success');
-      onRefresh();
-    }
-  };
-
-  const handleAnonymizeCustomer = async (customerId: string) => {
-    const res = await fetch(`/api/privacy/anonymize/${customerId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ purpose: 'Solicitação de anonimização LGPD' }),
-    });
-    if (res.ok) {
-      onNotify('Dados do cliente anonimizados conforme LGPD.', 'info');
       onRefresh();
     }
   };
@@ -677,8 +585,7 @@ export const AdminWorkspace: React.FC<{
     econConfig.defaultCacTarget;
   const simMarginPct = netAfterDiscount > 0 ? (simContribution / netAfterDiscount) * 100 : -100;
 
-  const totalAttentionCount =
-    awaitingPreparationOrders.length + exceptionOrders.length + pendingComplianceOffers.length;
+  const totalAttentionCount = awaitingPreparationOrders.length + exceptionOrders.length;
   const deliveredOrdersCount = orders.filter((o) => o.operationalStatus === 'delivered').length;
   const inProgressOrdersCount = orders.filter(
     (o) =>
@@ -694,13 +601,6 @@ export const AdminWorkspace: React.FC<{
   }
   if (exceptionOrders.length > 0) {
     attentionSummaryParts.push(`${exceptionOrders.length} com problema`);
-  }
-  if (pendingComplianceOffers.length > 0) {
-    attentionSummaryParts.push(
-      `${pendingComplianceOffers.length} ${
-        pendingComplianceOffers.length === 1 ? 'oferta para revisar' : 'ofertas para revisar'
-      }`
-    );
   }
   const attentionSubvalue =
     attentionSummaryParts.length > 0 ? attentionSummaryParts.join(' · ') : 'Nenhuma pendência agora';
@@ -854,31 +754,6 @@ export const AdminWorkspace: React.FC<{
                     </button>
                   </div>
                 )}
-
-                {pendingComplianceOffers.length > 0 && (
-                  <div className="py-2.5 px-3.5 rounded-xl bg-[var(--bg-subtle)]/60 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-2.5 text-sm text-[var(--text-primary)]">
-                      <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
-                      <span>
-                        <strong className="font-semibold">{pendingComplianceOffers.length}</strong>{' '}
-                        {pendingComplianceOffers.length === 1
-                          ? 'oferta aguardando aprovação'
-                          : 'ofertas aguardando aprovação'}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSection('PRODUTOS');
-                        setProductTab('COMPLIANCE');
-                      }}
-                      className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1 cursor-pointer shrink-0"
-                    >
-                      <span>Revisar</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -969,7 +844,7 @@ export const AdminWorkspace: React.FC<{
                 Produtos
               </h1>
               <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                Gerencie seu catálogo, estoque e informações regulatórias dos produtos.
+                Gerencie seu catálogo, estoque e informações dos produtos.
               </p>
             </div>
 
@@ -995,16 +870,6 @@ export const AdminWorkspace: React.FC<{
                 >
                   Kits & Combos ({offers.filter((o) => o.offerType !== '1_UNIT').length})
                 </button>
-                <button
-                  onClick={() => setProductTab('COMPLIANCE')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
-                    productTab === 'COMPLIANCE'
-                      ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  Conformidade & Rótulos ({complianceReviews.length})
-                </button>
               </div>
 
               <Button
@@ -1022,9 +887,10 @@ export const AdminWorkspace: React.FC<{
               const activeProductsCount = products.filter((p) => p.status === 'ACTIVE').length;
               const totalStockUnits = products.reduce((acc, p) => acc + p.stockQuantity, 0);
               const lowStockCount = products.filter((p) => p.stockQuantity < 150).length;
-              const pendingDocsOrComplianceCount = products.filter(
-                (p) => p.complianceStatus !== 'APPROVED' || p.documents.length === 0
-              ).length;
+              const totalStockCostValue = products.reduce(
+                (acc, p) => acc + p.stockQuantity * p.unitCost,
+                0
+              );
 
               const filteredProducts = products.filter((p) => {
                 const q = searchQuery.trim().toLowerCase();
@@ -1042,16 +908,7 @@ export const AdminWorkspace: React.FC<{
                 const matchesStatus =
                   productStatusFilter === 'ALL' || p.status === productStatusFilter;
 
-                const matchesCompliance =
-                  productComplianceFilter === 'ALL' ||
-                  (productComplianceFilter === 'APPROVED' &&
-                    p.complianceStatus === 'APPROVED' &&
-                    p.documents.length > 0) ||
-                  (productComplianceFilter === 'PENDING_REVIEW' &&
-                    p.complianceStatus !== 'APPROVED') ||
-                  (productComplianceFilter === 'MISSING_DOCS' && p.documents.length === 0);
-
-                return matchesQuery && matchesCategory && matchesStatus && matchesCompliance;
+                return matchesQuery && matchesCategory && matchesStatus;
               });
 
               return (
@@ -1085,15 +942,11 @@ export const AdminWorkspace: React.FC<{
                       icon={<Layers className="w-4 h-4" />}
                     />
                     <KPI
-                      label="Pendências Regulatórias"
-                      value={formatIntegerBR(pendingDocsOrComplianceCount)}
-                      subvalue={
-                        pendingDocsOrComplianceCount > 0
-                          ? 'Produtos sem dossiê ou revisão aprovada'
-                          : '100% do catálogo em conformidade'
-                      }
-                      accent={pendingDocsOrComplianceCount > 0 ? 'danger' : 'lime'}
-                      icon={<ShieldCheck className="w-4 h-4" />}
+                      label="Valor em Estoque"
+                      value={formatCurrencyBRL(totalStockCostValue)}
+                      subvalue="Custo físico total armazenado"
+                      accent="emerald"
+                      icon={<DollarSign className="w-4 h-4" />}
                     />
                   </div>
 
@@ -1137,30 +990,9 @@ export const AdminWorkspace: React.FC<{
                         <option value="INACTIVE">Somente inativos</option>
                       </select>
 
-                      <select
-                        value={productComplianceFilter}
-                        onChange={(e) =>
-                          setProductComplianceFilter(
-                            e.target.value as
-                              | 'ALL'
-                              | 'APPROVED'
-                              | 'PENDING_REVIEW'
-                              | 'MISSING_DOCS'
-                          )
-                        }
-                        aria-label="Filtrar por conformidade"
-                        className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-indigo-500"
-                      >
-                        <option value="ALL">Qualquer conformidade</option>
-                        <option value="APPROVED">Conformidade aprovada</option>
-                        <option value="PENDING_REVIEW">Revisão pendente</option>
-                        <option value="MISSING_DOCS">Sem documentos anexados</option>
-                      </select>
-
                       {(searchQuery ||
                         productCategoryFilter !== 'ALL' ||
-                        productStatusFilter !== 'ALL' ||
-                        productComplianceFilter !== 'ALL') && (
+                        productStatusFilter !== 'ALL') && (
                         <Button
                           size="xs"
                           variant="ghost"
@@ -1168,7 +1000,6 @@ export const AdminWorkspace: React.FC<{
                             setSearchQuery('');
                             setProductCategoryFilter('ALL');
                             setProductStatusFilter('ALL');
-                            setProductComplianceFilter('ALL');
                           }}
                         >
                           Limpar filtros
@@ -1205,17 +1036,12 @@ export const AdminWorkspace: React.FC<{
                               <th className="py-3.5 px-4">Lote & Validade</th>
                               <th className="py-3.5 px-4 text-right">Custo Unit.</th>
                               <th className="py-3.5 px-4 text-right">Estoque</th>
-                              <th className="py-3.5 px-4">Conformidade</th>
                               <th className="py-3.5 px-4">Status</th>
                               <th className="py-3.5 px-5 text-right">Ações</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[var(--border-subtle)]">
                             {filteredProducts.map((prod) => {
-                              const validDocsCount = (prod.documents || []).filter(
-                                (d) => d.status === 'VALID'
-                              ).length;
-                              const totalDocsCount = (prod.documents || []).length;
                               const isLowStock = prod.stockQuantity < 150;
                               const isOutOfStock = prod.stockQuantity <= 0;
 
@@ -1299,30 +1125,12 @@ export const AdminWorkspace: React.FC<{
                                     </div>
                                   </td>
 
-                                  {/* 6. Conformidade & Dossiê */}
-                                  <td className="py-4 px-4">
-                                    <div className="flex items-center gap-1.5">
-                                      <StatusBadge status={prod.complianceStatus} />
-                                    </div>
-                                    <div
-                                      className={`text-[11px] mt-1 ${
-                                        totalDocsCount === 0
-                                          ? 'text-amber-600 dark:text-amber-400 font-medium'
-                                          : 'text-[var(--text-muted)]'
-                                      }`}
-                                    >
-                                      {totalDocsCount === 0
-                                        ? 'Sem laudos anexados'
-                                        : `${validDocsCount}/${totalDocsCount} doc(s) válidos`}
-                                    </div>
-                                  </td>
-
-                                  {/* 7. Status do Produto */}
+                                  {/* 6. Status do Produto */}
                                   <td className="py-4 px-4">
                                     <StatusBadge status={prod.status} />
                                   </td>
 
-                                  {/* 8. Ações Rápidas */}
+                                  {/* 7. Ações Rápidas */}
                                   <td
                                     className="py-4 px-5 text-right"
                                     onClick={(e) => e.stopPropagation()}
@@ -1454,102 +1262,6 @@ export const AdminWorkspace: React.FC<{
                   })}
               </div>
             </div>
-          )}
-
-          {productTab === 'COMPLIANCE' && (
-            <Card
-              title="Checklist de Conformidade & Rotulagem (ANVISA / IN 28)"
-              subtitle="Validação regulatória de documentação, alegações funcionais e rotulagem antes de liberar produtos e ofertas"
-            >
-              <div className="space-y-4">
-                {complianceReviews.map((rev) => {
-                  const targetTypeLabel =
-                    rev.targetType === 'PRODUTO'
-                      ? 'Produto'
-                      : rev.targetType === 'OFERTA'
-                      ? 'Oferta'
-                      : 'Campanha';
-                  const linkedProd =
-                    rev.targetType === 'PRODUTO'
-                      ? products.find((p) => p.id === rev.targetId)
-                      : undefined;
-
-                  return (
-                    <div
-                      key={rev.id}
-                      className="bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] rounded-xl p-4 space-y-3"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <Badge tone="cyan">{targetTypeLabel}</Badge>
-                            <h4 className="text-sm font-bold text-[var(--text-primary)]">
-                              {rev.targetName}
-                            </h4>
-                          </div>
-                          <p className="text-xs text-[var(--text-secondary)] mt-1">{rev.notes}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {linkedProd && (
-                            <Button
-                              size="xs"
-                              variant="ghost"
-                              onClick={() => openProductDetail(linkedProd, 'DOCUMENTOS')}
-                            >
-                              Ver dossiê do produto
-                            </Button>
-                          )}
-                          <StatusBadge status={rev.status} />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 bg-[var(--bg-surface)] p-3 rounded-xl border border-[var(--border-subtle)] text-xs">
-                        {(
-                          [
-                            ['documentacaoExistente', '1. Documentação'],
-                            ['statusRegulatorio', '2. Status ANVISA'],
-                            ['claimsAprovados', '3. Claims IN 28'],
-                            ['rotulagem', '4. Rotulagem'],
-                            ['comunicacaoComercial', '5. Copy Comercial'],
-                            ['advertenciasObrigatorias', '6. Advertências'],
-                          ] as const
-                        ).map(([key, label]) => (
-                          <label
-                            key={key}
-                            className="flex items-center gap-2 cursor-pointer text-[var(--text-primary)]"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={rev.checklist[key]}
-                              onChange={() => handleUpdateCompliance(rev, undefined, key)}
-                              className="accent-indigo-600"
-                            />
-                            <span>{label}</span>
-                          </label>
-                        ))}
-                      </div>
-
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          size="xs"
-                          variant="primary"
-                          onClick={() => handleUpdateCompliance(rev, 'APPROVED')}
-                        >
-                          Aprovar Conformidade
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant="danger"
-                          onClick={() => handleUpdateCompliance(rev, 'REJECTED')}
-                        >
-                          Rejeitar
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
           )}
         </div>
       )}
@@ -1997,17 +1709,6 @@ export const AdminWorkspace: React.FC<{
                     <Card
                       title={activeCustomer.name}
                       subtitle={`CPF: ${activeCustomer.cpf} · ${activeCustomer.city}/${activeCustomer.state}`}
-                      action={
-                        !activeCustomer.anonymized && (
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            onClick={() => handleAnonymizeCustomer(activeCustomer.id)}
-                          >
-                            Anonimizar LGPD
-                          </Button>
-                        )
-                      }
                     >
                       <div className="space-y-4 text-xs">
                         <div className="p-3.5 rounded-xl bg-[var(--bg-subtle)]/60 border border-[var(--border-subtle)] space-y-1">
@@ -2650,7 +2351,6 @@ export const AdminWorkspace: React.FC<{
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge status={activeSelectedProduct.status} />
-                    <StatusBadge status={activeSelectedProduct.complianceStatus} />
                     <Badge tone="slate">{activeSelectedProduct.category}</Badge>
                   </div>
                   <p className="text-xs text-[var(--text-secondary)] mt-1.5 leading-relaxed">
@@ -2673,24 +2373,14 @@ export const AdminWorkspace: React.FC<{
                 Visão Geral & Estoque
               </button>
               <button
-                onClick={() => setProductDetailTab('ROTULO')}
+                onClick={() => setProductDetailTab('COMPOSICAO')}
                 className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
-                  productDetailTab === 'ROTULO'
+                  productDetailTab === 'COMPOSICAO'
                     ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
-                Composição, Rótulo & Claims ({activeSelectedProduct.approvedClaims.length})
-              </button>
-              <button
-                onClick={() => setProductDetailTab('DOCUMENTOS')}
-                className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
-                  productDetailTab === 'DOCUMENTOS'
-                    ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                Documentos & Conformidade ({activeSelectedProduct.documents.length})
+                Composição, Uso & Benefícios ({activeSelectedProduct.approvedClaims.length})
               </button>
             </div>
 
@@ -2861,8 +2551,8 @@ export const AdminWorkspace: React.FC<{
               </div>
             )}
 
-            {/* ABA 2: COMPOSIÇÃO, ROTULAGEM, ADVERTÊNCIAS E CLAIMS IN 28/2018 */}
-            {productDetailTab === 'ROTULO' && (
+            {/* ABA 2: COMPOSIÇÃO, USO E BENEFÍCIOS DO PRODUTO */}
+            {productDetailTab === 'COMPOSICAO' && (
               <div className="space-y-5 text-xs">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] space-y-1.5">
@@ -2883,250 +2573,75 @@ export const AdminWorkspace: React.FC<{
                     </p>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] space-y-1.5">
+                  <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] space-y-1.5 sm:col-span-2">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
-                      Advertências Obrigatórias no Rótulo
-                    </span>
-                    <p className="text-amber-700 dark:text-amber-300 font-medium leading-relaxed">
-                      {activeSelectedProduct.warnings || 'Não informado.'}
-                    </p>
-                  </div>
-
-                  <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] space-y-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
-                      Restrições de Público & Rotulagem (RDC 429)
+                      Recomendações & Observações
                     </span>
                     <p className="text-[var(--text-primary)] leading-relaxed">
                       {activeSelectedProduct.restrictions || 'Uso adulto.'}
                     </p>
-                    <p className="text-[11px] text-[var(--text-muted)] pt-1">
-                      {activeSelectedProduct.labelingInfo}
-                    </p>
                   </div>
                 </div>
 
-                {/* Alegações Funcionais Aprovadas (Claims IN 28/2018) */}
+                {/* Benefícios e Destaques Comerciais */}
                 <div className="p-4 rounded-2xl bg-[var(--bg-subtle)]/40 border border-[var(--border-subtle)] space-y-3">
                   <div>
                     <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-primary)]">
-                      Alegações Funcionais Autorizadas (Claims IN 28/2018)
+                      Benefícios e Destaques do Produto
                     </h4>
                     <p className="text-[11px] text-[var(--text-secondary)]">
-                      Frases permitidas na rotulagem e nas páginas de venda deste produto.
+                      Pontos principais exibidos na página de checkout deste produto.
                     </p>
                   </div>
 
                   {activeSelectedProduct.approvedClaims.length === 0 ? (
                     <p className="text-xs text-[var(--text-muted)] py-2">
-                      Nenhuma alegação funcional cadastrada para este produto.
+                      Nenhum benefício cadastrado para este produto.
                     </p>
                   ) : (
                     <div className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
                       {activeSelectedProduct.approvedClaims.map((claim) => (
                         <div
                           key={claim.id}
-                          className="p-3 flex items-start justify-between gap-3"
+                          className="p-3 flex items-center justify-between gap-3"
                         >
-                          <div className="space-y-0.5">
-                            <div className="font-semibold text-[var(--text-primary)]">
-                              “{claim.claimText}”
-                            </div>
-                            <div className="text-[11px] text-[var(--text-muted)] font-mono">
-                              Base legal: {claim.regulatoryBasis}
-                            </div>
+                          <div className="font-semibold text-[var(--text-primary)]">
+                            {claim.claimText}
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <StatusBadge status={claim.status} />
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleRemoveProductClaim(activeSelectedProduct.id, claim.id)
-                              }
-                              title="Remover alegação"
-                              className="p-1 text-[var(--text-muted)] hover:text-rose-500 cursor-pointer transition-colors"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleRemoveProductClaim(activeSelectedProduct.id, claim.id)
+                            }
+                            title="Remover benefício"
+                            className="p-1 text-[var(--text-muted)] hover:text-rose-500 cursor-pointer transition-colors shrink-0"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       ))}
                     </div>
                   )}
 
-                  {/* Formulário para adicionar nova alegação */}
+                  {/* Formulário para adicionar novo benefício */}
                   <form
                     onSubmit={(e) => handleAddProductClaim(e, activeSelectedProduct)}
-                    className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2"
+                    className="flex gap-2.5 pt-2"
                   >
-                    <div className="sm:col-span-2">
+                    <div className="flex-1">
                       <Input
-                        placeholder="Ex: A cafeína auxilia no aumento do estado de alerta..."
+                        placeholder="Ex: Fórmula concentrada de rápida absorção..."
                         value={newClaimForm.claimText}
                         onChange={(e) =>
                           setNewClaimForm({ ...newClaimForm, claimText: e.target.value })
                         }
                       />
                     </div>
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="IN ANVISA nº 28/2018"
-                        value={newClaimForm.regulatoryBasis}
-                        onChange={(e) =>
-                          setNewClaimForm({ ...newClaimForm, regulatoryBasis: e.target.value })
-                        }
-                      />
-                      <Button type="submit" size="sm" variant="secondary">
-                        Adicionar
-                      </Button>
-                    </div>
+                    <Button type="submit" size="sm" variant="secondary">
+                      Adicionar
+                    </Button>
                   </form>
                 </div>
-              </div>
-            )}
-
-            {/* ABA 3: DOCUMENTOS REGULATÓRIOS, LAUDOS E STATUS DE CONFORMIDADE */}
-            {productDetailTab === 'DOCUMENTOS' && (
-              <div className="space-y-5 text-xs">
-                <div className="p-4 rounded-2xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div>
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
-                      Enquadramento Regulatório (ANVISA)
-                    </span>
-                    <p className="text-sm font-semibold text-[var(--text-primary)] mt-0.5">
-                      {activeSelectedProduct.regulatoryInfo}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Select
-                      value={activeSelectedProduct.complianceStatus}
-                      onChange={(e) =>
-                        handleUpdateProductQuickFields(
-                          activeSelectedProduct.id,
-                          { complianceStatus: e.target.value as ComplianceState },
-                          `Status regulatório de ${activeSelectedProduct.sku} alterado.`
-                        )
-                      }
-                      options={[
-                        { value: 'DRAFT', label: 'Rascunho' },
-                        { value: 'UNDER_REVIEW', label: 'Em revisão' },
-                        { value: 'APPROVED', label: 'Aprovado' },
-                        { value: 'REJECTED', label: 'Rejeitado' },
-                      ]}
-                    />
-                  </div>
-                </div>
-
-                {/* Lista de Documentos & Laudos Anexados */}
-                <div className="space-y-2.5">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                    Dossiê Técnico & Laudos Anexados ({activeSelectedProduct.documents.length})
-                  </h4>
-
-                  {activeSelectedProduct.documents.length === 0 ? (
-                    <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-xs">
-                      Nenhum documento ou laudo técnico anexado a este produto ainda. Utilize o formulário abaixo para anexar.
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
-                      {activeSelectedProduct.documents.map((doc) => {
-                        const docTypeLabels: Record<ProductDocument['docType'], string> = {
-                          LAUDO_TECNICO: 'Laudo Laboratorial',
-                          NOTIFICACAO_ANVISA: 'Notificação ANVISA',
-                          FICHA_SEGURANCA: 'Ficha Técnica / Segurança',
-                          ROTULO_APROVADO: 'Arte de Rótulo Aprovado',
-                        };
-                        return (
-                          <div
-                            key={doc.id}
-                            className="p-3.5 flex items-center justify-between gap-3"
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-                                <FileText className="w-4 h-4" />
-                              </div>
-                              <div className="min-w-0">
-                                <div className="font-bold text-[var(--text-primary)] truncate">
-                                  {doc.title}
-                                </div>
-                                <div className="text-[11px] text-[var(--text-muted)] flex flex-wrap items-center gap-2 mt-0.5">
-                                  <span>{docTypeLabels[doc.docType] || doc.docType}</span>
-                                  <span>·</span>
-                                  <span className="font-mono">{doc.version}</span>
-                                  <span>·</span>
-                                  <span>Anexado em {formatDateBR(doc.uploadedAt)}</span>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2 shrink-0">
-                              <StatusBadge status={doc.status} />
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleRemoveProductDocument(activeSelectedProduct.id, doc.id)
-                                }
-                                title="Remover documento"
-                                className="p-1.5 text-[var(--text-muted)] hover:text-rose-500 cursor-pointer transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Formulário real para anexar novo documento ao produto */}
-                <form
-                  onSubmit={(e) => handleAddProductDocument(e, activeSelectedProduct)}
-                  className="p-4 rounded-2xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] space-y-3"
-                >
-                  <div className="font-bold text-[var(--text-primary)]">
-                    Anexar Novo Documento ou Laudo Técnico
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="sm:col-span-2">
-                      <Input
-                        label="Título do Documento / Laudo"
-                        placeholder="Ex: Laudo Microbiológico Lote LT-2026-09"
-                        value={newDocForm.title}
-                        onChange={(e) => setNewDocForm({ ...newDocForm, title: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <Select
-                      label="Tipo de Documento"
-                      value={newDocForm.docType}
-                      onChange={(e) =>
-                        setNewDocForm({
-                          ...newDocForm,
-                          docType: e.target.value as ProductDocument['docType'],
-                        })
-                      }
-                      options={[
-                        { value: 'LAUDO_TECNICO', label: 'Laudo Laboratorial' },
-                        { value: 'NOTIFICACAO_ANVISA', label: 'Notificação ANVISA' },
-                        { value: 'FICHA_SEGURANCA', label: 'Ficha Técnica / Segurança' },
-                        { value: 'ROTULO_APROVADO', label: 'Arte de Rótulo Aprovado' },
-                      ]}
-                    />
-                  </div>
-                  <div className="flex flex-wrap items-end justify-between gap-3">
-                    <div className="w-36">
-                      <Input
-                        label="Versão"
-                        placeholder="v1.0"
-                        value={newDocForm.version}
-                        onChange={(e) => setNewDocForm({ ...newDocForm, version: e.target.value })}
-                      />
-                    </div>
-                    <Button type="submit" size="sm" icon={<Plus className="w-4 h-4" />}>
-                      Anexar ao Dossiê do Produto
-                    </Button>
-                  </div>
-                </form>
               </div>
             )}
           </div>
@@ -3140,7 +2655,7 @@ export const AdminWorkspace: React.FC<{
         open={productModalOpen}
         onClose={() => setProductModalOpen(false)}
         title={editingProduct ? `Editar Produto (${editingProduct.sku})` : 'Cadastrar Novo Produto'}
-        subtitle="Preencha os dados físicos, operacionais e regulatórios do item de catálogo."
+        subtitle="Preencha os dados físicos, operacionais e de catálogo do produto."
         maxWidth="max-w-3xl"
       >
         <form onSubmit={handleSaveProduct} className="space-y-5">
@@ -3266,10 +2781,10 @@ export const AdminWorkspace: React.FC<{
             </div>
           </div>
 
-          {/* Bloco 3: Composição, Rótulo & Regulatório */}
+          {/* Bloco 3: Composição & Informações de Uso */}
           <div className="space-y-3 pt-3 border-t border-[var(--border-subtle)]">
             <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-              3. Composição, Rotulagem & Regulatório (ANVISA)
+              3. Composição & Informações de Uso
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input
@@ -3286,57 +2801,11 @@ export const AdminWorkspace: React.FC<{
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Input
-                label="Enquadramento Regulatório (ANVISA)"
-                value={prodForm.regulatoryInfo}
-                onChange={(e) => setProdForm({ ...prodForm, regulatoryInfo: e.target.value })}
-              />
-              <Input
-                label="Restrições de Público"
-                value={prodForm.restrictions}
-                onChange={(e) => setProdForm({ ...prodForm, restrictions: e.target.value })}
-              />
-            </div>
-
             <Input
-              label="Advertências Obrigatórias de Rotulagem"
-              value={prodForm.warnings}
-              onChange={(e) => setProdForm({ ...prodForm, warnings: e.target.value })}
+              label="Recomendações / Observações"
+              value={prodForm.restrictions}
+              onChange={(e) => setProdForm({ ...prodForm, restrictions: e.target.value })}
             />
-
-            <div className="space-y-2">
-              <FileUploader
-                label="Anexar Documento / Laudo Técnico ao Produto"
-                onUpload={(fn) => {
-                  const newDoc: ProductDocument = {
-                    id: `doc_${Date.now()}`,
-                    productId: editingProduct?.id || '',
-                    title: fn.replace(/\.[^/.]+$/, ''),
-                    docType: 'LAUDO_TECNICO',
-                    fileUrl: `/docs/${fn}`,
-                    version: 'v1.0',
-                    status: 'VALID',
-                    uploadedBy: user.id,
-                    uploadedAt: new Date().toISOString(),
-                  };
-                  setProdForm({
-                    ...prodForm,
-                    documents: [...(prodForm.documents || []), newDoc],
-                  });
-                  onNotify(`Documento "${fn}" preparado para vinculação ao produto.`, 'info');
-                }}
-              />
-              {prodForm.documents && prodForm.documents.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {prodForm.documents.map((d) => (
-                    <Badge key={d.id} tone="emerald">
-                      {d.title} ({d.version})
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border-subtle)]">

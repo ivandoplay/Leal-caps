@@ -348,12 +348,13 @@ describe('LEAL CAPS — Suite Completa de Testes Operacionais, Comerciais e de S
       expect(statusRes.status).toBe(403);
     });
 
-    it('deve impedir que VENDEDOR tente manipular preço ao criar link de oferta', async () => {
+    it('deve impedir que VENDEDOR crie link de oferta com preço abaixo do mínimo permitido', async () => {
       const linkRes = await request(app)
         .post('/api/seller/links')
         .set(SELLER1_AUTH)
-        .send({ offerId: 'off_7xk29', customPrice: 99.0 });
-      expect(linkRes.status).toBe(403);
+        .send({ offerId: 'off_7xk29', salePrice: 99.0 });
+      expect(linkRes.status).toBe(422);
+      expect(linkRes.body.code).toBe('PRICE_BELOW_MINIMUM');
     });
 
     it('deve impedir que FULFILLMENT acesse logs de auditoria ou altere regras econômicas', async () => {
@@ -476,6 +477,165 @@ describe('LEAL CAPS — Suite Completa de Testes Operacionais, Comerciais e de S
       expect(dupRes.body.product.status).toBe('INACTIVE');
       expect(dupRes.body.product.complianceStatus).toBe('DRAFT');
       expect(dupRes.body.product.documents[0].productId).toBe(dupRes.body.product.id);
+    });
+  });
+
+  // ==========================================================================
+  // 8. TESTES DE NEGOCIAÇÃO DO VENDEDOR E LINKS ÚNICOS POR VENDA
+  // ==========================================================================
+  describe('8. Negociação do Vendedor (preço mínimo, comissão, excedente, links únicos, checkout e snapshot)', () => {
+    it('deve validar preço mínimo e teto máximo na simulação e criação de link', async () => {
+      // off_combo01 tem minimumPrice = 200, basePrice = 300, maximumPrice = 500, commissionPercent = 12
+      const belowMinSim = await request(app)
+        .post('/api/seller/links/simulate')
+        .set(SELLER1_AUTH)
+        .send({ offerId: 'off_combo01', salePrice: 199.99 });
+      expect(belowMinSim.status).toBe(422);
+      expect(belowMinSim.body.code).toBe('PRICE_BELOW_MINIMUM');
+
+      const aboveMaxSim = await request(app)
+        .post('/api/seller/links/simulate')
+        .set(SELLER1_AUTH)
+        .send({ offerId: 'off_combo01', salePrice: 500.01 });
+      expect(aboveMaxSim.status).toBe(422);
+      expect(aboveMaxSim.body.code).toBe('PRICE_ABOVE_MAXIMUM');
+
+      // Preço entre o mínimo (200) e o base (300): ex: R$ 250 -> comissão 12% = R$ 30, excedente = R$ 0, ganho = R$ 30
+      const betweenMinAndBaseSim = await request(app)
+        .post('/api/seller/links/simulate')
+        .set(SELLER1_AUTH)
+        .send({ offerId: 'off_combo01', salePrice: 250 });
+      expect(betweenMinAndBaseSim.status).toBe(200);
+      expect(betweenMinAndBaseSim.body.commissionAmount).toBe(30);
+      expect(betweenMinAndBaseSim.body.surplusAmount).toBe(0);
+      expect(betweenMinAndBaseSim.body.sellerEarnings).toBe(30);
+    });
+
+    it('deve calcular comissão (12% = R$ 42), excedente integral acima do preço-base (R$ 50) e ganho total (R$ 92) ao vender por R$ 350', async () => {
+      const simRes = await request(app)
+        .post('/api/seller/links/simulate')
+        .set(SELLER1_AUTH)
+        .send({ offerId: 'off_combo01', salePrice: 350 });
+
+      expect(simRes.status).toBe(200);
+      expect(simRes.body.minimumPrice).toBe(200);
+      expect(simRes.body.basePrice).toBe(300);
+      expect(simRes.body.commissionPercent).toBe(12);
+      expect(simRes.body.commissionAmount).toBe(42);
+      expect(simRes.body.surplusAmount).toBe(50);
+      expect(simRes.body.sellerEarnings).toBe(92);
+    });
+
+    it('deve gerar links únicos diferentes para cada negociação, mesmo para o mesmo vendedor, mesma oferta e mesmo preço', async () => {
+      const linkARes = await request(app)
+        .post('/api/seller/links')
+        .set(SELLER1_AUTH)
+        .send({ offerId: 'off_combo01', salePrice: 350, couponCode: '' });
+      expect(linkARes.status).toBe(201);
+
+      const linkBRes = await request(app)
+        .post('/api/seller/links')
+        .set(SELLER1_AUTH)
+        .send({ offerId: 'off_combo01', salePrice: 350, couponCode: '' });
+      expect(linkBRes.status).toBe(201);
+
+      const linkCRes = await request(app)
+        .post('/api/seller/links')
+        .set(SELLER1_AUTH)
+        .send({ offerId: 'off_combo01', salePrice: 400, couponCode: '' });
+      expect(linkCRes.status).toBe(201);
+
+      const linkA = linkARes.body.link;
+      const linkB = linkBRes.body.link;
+      const linkC = linkCRes.body.link;
+
+      expect(linkA.id).not.toBe(linkB.id);
+      expect(linkA.code).not.toBe(linkB.code);
+      expect(linkB.code).not.toBe(linkC.code);
+
+      expect(linkA.salePrice).toBe(350);
+      expect(linkA.commissionAmount).toBe(42);
+      expect(linkA.surplusAmount).toBe(50);
+      expect(linkA.sellerEarnings).toBe(92);
+
+      expect(linkB.salePrice).toBe(350);
+      expect(linkB.sellerEarnings).toBe(92);
+
+      // Link C vendido por R$ 400 -> comissão 12% (R$ 48) + excedente (R$ 100) = Ganho R$ 148
+      expect(linkC.salePrice).toBe(400);
+      expect(linkC.commissionAmount).toBe(48);
+      expect(linkC.surplusAmount).toBe(100);
+      expect(linkC.sellerEarnings).toBe(148);
+    });
+
+    it('deve usar o preço negociado no checkout, impedir alteração pelo cliente, vincular o pedido ao OfferLink e preservar links antigos se a oferta mudar', async () => {
+      // 1. Vendedor gera link por R$ 350
+      const createLinkRes = await request(app)
+        .post('/api/seller/links')
+        .set(SELLER1_AUTH)
+        .send({ offerId: 'off_combo01', salePrice: 350, couponCode: '' });
+      expect(createLinkRes.status).toBe(201);
+      const createdLink = createLinkRes.body.link;
+
+      // 2. Admin altera a oferta depois (muda promotionalPrice/basePrice para 340 e commissionPercent para 8%)
+      const patchOfferRes = await request(app)
+        .patch('/api/offers/off_combo01')
+        .set(ADMIN_AUTH)
+        .send({ promotionalPrice: 340, basePrice: 340, minimumPrice: 250, commissionPercent: 8 });
+      expect(patchOfferRes.status).toBe(200);
+
+      // 3. Cliente acessa /api/o/:code -> deve ver o snapshot congelado daquela negociação (R$ 350)
+      const publicOfferRes = await request(app).get(`/api/o/${createdLink.code}`);
+      expect(publicOfferRes.status).toBe(200);
+      expect(publicOfferRes.body.offer.promotionalPrice).toBe(350);
+      expect(publicOfferRes.body.link.id).toBe(createdLink.id);
+      expect(publicOfferRes.body.link.salePrice).toBe(350);
+      expect(publicOfferRes.body.link.basePrice).toBe(300);
+      expect(publicOfferRes.body.link.sellerEarnings).toBe(92);
+
+      // 4. Cliente conclui o checkout tentando enviar um preço manipulado (ex: salePrice: 100) -> backend ignora e cobra R$ 350
+      const checkoutRes = await request(app)
+        .post('/api/checkout')
+        .send({
+          offerId: 'off_combo01',
+          linkCode: createdLink.code,
+          salePrice: 100,
+          subtotal: 100,
+          total: 100,
+          cep: '01310100',
+          paymentMethod: 'PIX',
+          customer: {
+            name: 'Cliente Negociação Única',
+            phone: '11999887766',
+            email: 'negociacao@teste.com',
+            cpf: '999.888.777-66',
+            street: 'Av. Paulista',
+            number: '1500',
+            neighborhood: 'Bela Vista',
+            city: 'São Paulo',
+            state: 'SP',
+          },
+        });
+
+      expect(checkoutRes.status).toBe(201);
+      const order = checkoutRes.body.order;
+      expect(order.subtotal).toBe(350);
+      expect(order.total).toBe(350); // off_combo01 possui frete grátis
+      expect(order.offerLinkId).toBe(createdLink.id);
+      expect(order.offerLinkCode).toBe(createdLink.code);
+      expect(order.sellerId).toBe('usr_seller_01');
+
+      // 5. Verificar comissão congelada gerada para o pedido: deve respeitar o snapshot do link (R$ 42 + R$ 50 = R$ 92)
+      const frozenCommission = store.state.commissions.find((c) => c.orderId === order.id)!;
+      expect(frozenCommission).toBeDefined();
+      expect(frozenCommission.offerLinkId).toBe(createdLink.id);
+      expect(frozenCommission.offerLinkCode).toBe(createdLink.code);
+      expect(frozenCommission.calculationBase).toBe(350);
+      expect(frozenCommission.basePrice).toBe(300);
+      expect(frozenCommission.percentage).toBe(12);
+      expect(frozenCommission.commissionAmount).toBe(42);
+      expect(frozenCommission.surplusAmount).toBe(50);
+      expect(frozenCommission.amount).toBe(92);
     });
   });
 });

@@ -150,6 +150,10 @@ export interface Offer {
   totalUnits: number;
   regularPrice: number;
   promotionalPrice: number;
+  minimumPrice: number;
+  basePrice: number;
+  maximumPrice?: number | null;
+  commissionPercent: number;
   discountPercent: number;
   maxCouponDiscountPercent: number;
   defaultCouponCode?: string;
@@ -171,11 +175,20 @@ export interface Offer {
 
 export interface OfferLink {
   id: string;
-  code: string; // e.g., 7XK29 or seller specific
+  code: string; // unique negotiation code -> /o/XXXXXX
   offerId: string;
+  offerName?: string;
   campaignId: string | null;
   sellerId: string;
   sellerName: string;
+  salePrice: number;
+  basePrice: number;
+  minimumPrice: number;
+  maximumPrice?: number | null;
+  commissionPercent: number;
+  commissionAmount: number;
+  surplusAmount: number;
+  sellerEarnings: number;
   couponCode?: string;
   clicks: number;
   conversions: number;
@@ -303,6 +316,8 @@ export interface Order {
   sellerName: string;
   offerId: string;
   offerName: string;
+  offerLinkId?: string | null;
+  offerLinkCode?: string | null;
   campaignId: string | null;
   campaignName: string;
   couponCode: string | null;
@@ -383,8 +398,13 @@ export interface Commission {
   sellerName: string;
   orderId: string;
   orderNumber: string;
+  offerLinkId?: string | null;
+  offerLinkCode?: string | null;
   calculationBase: number;
+  basePrice?: number;
   percentage: number;
+  commissionAmount?: number;
+  surplusAmount?: number;
   amount: number;
   status: 'PENDING' | 'APPROVED' | 'PAID' | 'CANCELLED';
   ruleUsed: string;

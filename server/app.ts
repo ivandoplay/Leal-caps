@@ -698,6 +698,23 @@ export function createApp(customStore?: RelationalStore) {
           .replace(/[^A-Z0-9]/g, '') ||
         Math.random().toString(36).substring(2, 7).toUpperCase();
 
+      const basePrice =
+        body.basePrice !== undefined && Number(body.basePrice) > 0
+          ? Number(body.basePrice)
+          : promotionalPrice;
+      const minimumPrice =
+        body.minimumPrice !== undefined && Number(body.minimumPrice) > 0
+          ? Number(body.minimumPrice)
+          : Number((basePrice * 0.75).toFixed(2));
+      const maximumPrice =
+        body.maximumPrice !== undefined && body.maximumPrice !== null && body.maximumPrice !== ''
+          ? Number(body.maximumPrice)
+          : null;
+      const commissionPercent =
+        body.commissionPercent !== undefined && Number(body.commissionPercent) > 0
+          ? Number(body.commissionPercent)
+          : config.defaultCommissionPercent || 12;
+
       const newOffer: Offer = {
         id: `off_${Date.now()}`,
         code,
@@ -707,6 +724,10 @@ export function createApp(customStore?: RelationalStore) {
         totalUnits: items.reduce((sum: number, i: { quantity: number }) => sum + Number(i.quantity), 0),
         regularPrice,
         promotionalPrice,
+        minimumPrice,
+        basePrice,
+        maximumPrice,
+        commissionPercent,
         discountPercent,
         maxCouponDiscountPercent: Number(body.maxCouponDiscountPercent ?? 10),
         defaultCouponCode: body.defaultCouponCode || undefined,
@@ -788,10 +809,36 @@ export function createApp(customStore?: RelationalStore) {
       }
 
       const prevPrice = offer.promotionalPrice;
+      const newBasePrice =
+        req.body.basePrice !== undefined
+          ? Number(req.body.basePrice)
+          : req.body.promotionalPrice !== undefined
+            ? newPromo
+            : offer.basePrice ?? newPromo;
+      const newMinPrice =
+        req.body.minimumPrice !== undefined
+          ? Number(req.body.minimumPrice)
+          : offer.minimumPrice ?? Number((newBasePrice * 0.75).toFixed(2));
+      const newMaxPrice =
+        req.body.maximumPrice !== undefined
+          ? req.body.maximumPrice === null || req.body.maximumPrice === ''
+            ? null
+            : Number(req.body.maximumPrice)
+          : offer.maximumPrice ?? null;
+      const newCommissionPercent =
+        req.body.commissionPercent !== undefined
+          ? Number(req.body.commissionPercent)
+          : offer.commissionPercent ?? config.defaultCommissionPercent;
+
+      // Note: Updating an Offer only updates future negotiations; existing OfferLinks preserve their snapshot
       Object.assign(offer, req.body, {
         id: offer.id,
         regularPrice: newRegular,
         promotionalPrice: newPromo,
+        basePrice: newBasePrice,
+        minimumPrice: newMinPrice,
+        maximumPrice: newMaxPrice,
+        commissionPercent: newCommissionPercent,
         discountPercent,
         updatedAt: new Date().toISOString(),
       });
@@ -862,16 +909,147 @@ export function createApp(customStore?: RelationalStore) {
     }
   );
 
+  // Helper: Calculate and validate seller negotiation price & earnings (Server as source of truth)
+  const computeSellerNegotiation = (
+    offer: Offer,
+    seller: User,
+    rawSalePrice: unknown
+  ): {
+    valid: boolean;
+    status: number;
+    code?: string;
+    error?: string;
+    salePrice: number;
+    basePrice: number;
+    minimumPrice: number;
+    maximumPrice: number | null;
+    commissionPercent: number;
+    commissionAmount: number;
+    surplusAmount: number;
+    sellerEarnings: number;
+  } => {
+    const defaultComm = store.state.unitEconomicsConfig.defaultCommissionPercent || 12;
+    const basePrice = Number((offer.basePrice ?? offer.promotionalPrice).toFixed(2));
+    const minimumPrice = Number(
+      (offer.minimumPrice ?? Number((basePrice * 0.75).toFixed(2))).toFixed(2)
+    );
+    const maximumPrice =
+      offer.maximumPrice !== undefined && offer.maximumPrice !== null
+        ? Number(Number(offer.maximumPrice).toFixed(2))
+        : null;
+    const commissionPercent = Number(
+      offer.commissionPercent ?? seller.commissionRate ?? defaultComm
+    );
+
+    const parsedPrice =
+      rawSalePrice !== undefined && rawSalePrice !== null && rawSalePrice !== ''
+        ? Number(rawSalePrice)
+        : basePrice;
+
+    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+      return {
+        valid: false,
+        status: 400,
+        code: 'INVALID_SALE_PRICE',
+        error: 'Informe um preço de venda válido maior que zero.',
+        salePrice: 0,
+        basePrice,
+        minimumPrice,
+        maximumPrice,
+        commissionPercent,
+        commissionAmount: 0,
+        surplusAmount: 0,
+        sellerEarnings: 0,
+      };
+    }
+
+    const salePrice = Number(parsedPrice.toFixed(2));
+
+    if (salePrice < minimumPrice) {
+      return {
+        valid: false,
+        status: 422,
+        code: 'PRICE_BELOW_MINIMUM',
+        error: `Preço informado (R$ ${salePrice.toFixed(2)}) está abaixo do preço mínimo permitido para esta oferta (R$ ${minimumPrice.toFixed(2)}).`,
+        salePrice,
+        basePrice,
+        minimumPrice,
+        maximumPrice,
+        commissionPercent,
+        commissionAmount: 0,
+        surplusAmount: 0,
+        sellerEarnings: 0,
+      };
+    }
+
+    if (maximumPrice !== null && salePrice > maximumPrice) {
+      return {
+        valid: false,
+        status: 422,
+        code: 'PRICE_ABOVE_MAXIMUM',
+        error: `Preço informado (R$ ${salePrice.toFixed(2)}) excede o teto máximo permitido para esta oferta (R$ ${maximumPrice.toFixed(2)}).`,
+        salePrice,
+        basePrice,
+        minimumPrice,
+        maximumPrice,
+        commissionPercent,
+        commissionAmount: 0,
+        surplusAmount: 0,
+        sellerEarnings: 0,
+      };
+    }
+
+    // Rule:
+    // - commissionAmount = salePrice * (commissionPercent / 100)
+    // - surplusAmount = max(0, salePrice - basePrice) -> belongs 100% to seller without a second 12% charge
+    // - sellerEarnings = commissionAmount + surplusAmount
+    const commissionAmount = Number(((salePrice * commissionPercent) / 100).toFixed(2));
+    const surplusAmount = Number(Math.max(0, salePrice - basePrice).toFixed(2));
+    const sellerEarnings = Number((commissionAmount + surplusAmount).toFixed(2));
+
+    return {
+      valid: true,
+      status: 200,
+      salePrice,
+      basePrice,
+      minimumPrice,
+      maximumPrice,
+      commissionPercent,
+      commissionAmount,
+      surplusAmount,
+      sellerEarnings,
+    };
+  };
+
+  // Helper: Generate guaranteed unique negotiation link code (never reuses previous links)
+  const generateUniqueNegotiationCode = (offerCode: string): string => {
+    const prefix = offerCode.replace(/[^A-Z0-9]/gi, '').slice(0, 3).toUpperCase() || 'LNK';
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let candidate = '';
+    do {
+      let suffix = '';
+      for (let i = 0; i < 5; i++) {
+        suffix += alphabet[Math.floor(Math.random() * alphabet.length)];
+      }
+      candidate = `${prefix}${suffix}`;
+    } while (
+      store.state.offerLinks.some((l) => l.code.toUpperCase() === candidate) ||
+      store.state.offers.some((o) => o.code.toUpperCase() === candidate)
+    );
+    return candidate;
+  };
+
   // Public Offer Link Resolution: /o/:code
   router.get('/o/:code', (req: Request, res: Response, next: NextFunction) => {
     if (!req.originalUrl.startsWith('/api/') && req.headers.accept?.includes('text/html')) {
       return next();
     }
     const code = String(req.params.code || '').toUpperCase();
+    // Resolve specific OfferLink negotiation first so snapshot price and attribution take precedence
     const link = store.state.offerLinks.find((l) => l.code.toUpperCase() === code);
-    const offer =
-      store.state.offers.find((o) => o.code.toUpperCase() === code) ||
-      (link ? store.state.offers.find((o) => o.id === link.offerId) : undefined);
+    const offer = link
+      ? store.state.offers.find((o) => o.id === link.offerId)
+      : store.state.offers.find((o) => o.code.toUpperCase() === code);
 
     if (!offer) {
       return res.status(404).json({ error: 'Link de oferta não encontrado.' });
@@ -904,7 +1082,7 @@ export function createApp(customStore?: RelationalStore) {
     }
 
     store.state.analyticsEvents.push({
-      id: `an_${Date.now()}`,
+      id: `an_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       eventType: 'link_acessado',
       offerId: offer.id,
       sellerId: link?.sellerId || offer.sellerId,
@@ -922,8 +1100,28 @@ export function createApp(customStore?: RelationalStore) {
     );
     const seller = store.state.users.find((u) => u.id === (link?.sellerId || offer.sellerId));
 
+    // If accessed via a negotiation OfferLink, apply the link's frozen snapshot salePrice
+    const effectiveSalePrice =
+      link && link.salePrice !== undefined ? Number(link.salePrice) : offer.promotionalPrice;
+    const effectiveRegularPrice =
+      offer.regularPrice > effectiveSalePrice ? offer.regularPrice : effectiveSalePrice;
+    const effectiveDiscountPercent =
+      effectiveRegularPrice > effectiveSalePrice
+        ? Number(
+            (((effectiveRegularPrice - effectiveSalePrice) / effectiveRegularPrice) * 100).toFixed(2)
+          )
+        : 0;
+
+    const offerSnapshotForCheckout: Offer = {
+      ...offer,
+      name: link?.offerName || offer.name,
+      promotionalPrice: effectiveSalePrice,
+      regularPrice: effectiveRegularPrice,
+      discountPercent: effectiveDiscountPercent,
+    };
+
     return res.json({
-      offer,
+      offer: offerSnapshotForCheckout,
       link: link || null,
       products: productsDetails,
       campaign: campaign
@@ -933,7 +1131,7 @@ export function createApp(customStore?: RelationalStore) {
     });
   });
 
-  // Seller Link Generation (Seller consumes authorized offers only, cannot alter price)
+  // Seller Link Listing (Negotiation History)
   router.get('/seller/links', requireAuth, (req: AuthenticatedRequest, res: Response) => {
     const user = req.user!;
     const links =
@@ -943,20 +1141,68 @@ export function createApp(customStore?: RelationalStore) {
     return res.json({ links });
   });
 
+  // Seller Gain Simulation Endpoint (Backend as source of truth)
+  router.post(
+    '/seller/links/simulate',
+    requireAuth,
+    requireRole(['ADMIN', 'VENDEDOR']),
+    (req: AuthenticatedRequest, res: Response) => {
+      const user = req.user!;
+      const { offerId, salePrice, price } = req.body || {};
+
+      const offer = store.state.offers.find((o) => o.id === offerId);
+      if (!offer) return res.status(404).json({ error: 'Oferta não encontrada.' });
+
+      if (offer.status !== 'ACTIVE' || offer.complianceStatus !== 'APPROVED') {
+        return res.status(422).json({
+          error: 'Apenas ofertas ativas e aprovadas podem ser negociadas.',
+        });
+      }
+
+      if (user.role === 'VENDEDOR' && offer.sellerId && offer.sellerId !== user.id) {
+        return res.status(403).json({
+          error: 'Esta oferta não está autorizada para o seu perfil de vendedor.',
+        });
+      }
+
+      const sim = computeSellerNegotiation(offer, user, salePrice ?? price);
+      if (!sim.valid) {
+        return res.status(sim.status).json({
+          valid: false,
+          error: sim.error,
+          code: sim.code,
+          offerId: offer.id,
+          minimumPrice: sim.minimumPrice,
+          basePrice: sim.basePrice,
+          maximumPrice: sim.maximumPrice,
+          commissionPercent: sim.commissionPercent,
+        });
+      }
+
+      return res.json({
+        valid: true,
+        offerId: offer.id,
+        offerName: offer.name,
+        salePrice: sim.salePrice,
+        minimumPrice: sim.minimumPrice,
+        basePrice: sim.basePrice,
+        maximumPrice: sim.maximumPrice,
+        commissionPercent: sim.commissionPercent,
+        commissionAmount: sim.commissionAmount,
+        surplusAmount: sim.surplusAmount,
+        sellerEarnings: sim.sellerEarnings,
+      });
+    }
+  );
+
+  // Seller Unique Negotiation Link Creation (Never reuses previous links; saves commercial snapshot)
   router.post(
     '/seller/links',
     requireAuth,
     requireRole(['ADMIN', 'VENDEDOR']),
     (req: AuthenticatedRequest, res: Response) => {
       const user = req.user!;
-      const { offerId, campaignId, couponCode, customPrice } = req.body || {};
-
-      // Strictly forbid seller from passing customPrice
-      if (customPrice !== undefined) {
-        return res.status(403).json({
-          error: 'Violação de regra comercial: Vendedor não possui permissão para alterar preços de ofertas.',
-        });
-      }
+      const { offerId, campaignId, couponCode, salePrice, price, customPrice } = req.body || {};
 
       const offer = store.state.offers.find((o) => o.id === offerId);
       if (!offer) return res.status(404).json({ error: 'Oferta não encontrada.' });
@@ -969,20 +1215,42 @@ export function createApp(customStore?: RelationalStore) {
         return res.status(403).json({ error: 'Esta oferta não está autorizada para o seu perfil de vendedor.' });
       }
 
-      const code = `${offer.code.slice(0, 3)}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
+      const requestedPrice = salePrice ?? price ?? customPrice;
+      const sim = computeSellerNegotiation(offer, user, requestedPrice);
+      if (!sim.valid) {
+        return res.status(sim.status).json({
+          error: sim.error,
+          code: sim.code,
+          minimumPrice: sim.minimumPrice,
+          basePrice: sim.basePrice,
+          maximumPrice: sim.maximumPrice,
+        });
+      }
+
+      const code = generateUniqueNegotiationCode(offer.code);
+      const now = new Date().toISOString();
       const newLink: OfferLink = {
-        id: `lnk_${Date.now()}`,
+        id: `lnk_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         code,
         offerId: offer.id,
+        offerName: offer.name,
         campaignId: campaignId || offer.campaignId,
         sellerId: user.id,
         sellerName: user.name,
-        couponCode: couponCode || offer.defaultCouponCode,
+        salePrice: sim.salePrice,
+        basePrice: sim.basePrice,
+        minimumPrice: sim.minimumPrice,
+        maximumPrice: sim.maximumPrice,
+        commissionPercent: sim.commissionPercent,
+        commissionAmount: sim.commissionAmount,
+        surplusAmount: sim.surplusAmount,
+        sellerEarnings: sim.sellerEarnings,
+        couponCode: couponCode !== undefined ? (couponCode || undefined) : offer.defaultCouponCode,
         clicks: 0,
         conversions: 0,
         status: 'ACTIVE',
         expiresAt: offer.endsAt,
-        createdAt: new Date().toISOString(),
+        createdAt: now,
       };
 
       store.state.offerLinks.unshift(newLink);
@@ -993,10 +1261,19 @@ export function createApp(customStore?: RelationalStore) {
         action: 'LINK_OFERTA_GERADO',
         entity: 'OfferLink',
         entityId: newLink.id,
-        previousValue: '-',
-        newValue: `/o/${newLink.code}`,
+        previousValue: `Base R$ ${sim.basePrice.toFixed(2)}`,
+        newValue: `/o/${newLink.code} (Venda R$ ${sim.salePrice.toFixed(2)} | Ganho R$ ${sim.sellerEarnings.toFixed(2)})`,
         ip: req.ip || '127.0.0.1',
-        metadata: JSON.stringify({ offerId: offer.id }),
+        metadata: JSON.stringify({
+          offerId: offer.id,
+          salePrice: sim.salePrice,
+          basePrice: sim.basePrice,
+          minimumPrice: sim.minimumPrice,
+          commissionPercent: sim.commissionPercent,
+          commissionAmount: sim.commissionAmount,
+          surplusAmount: sim.surplusAmount,
+          sellerEarnings: sim.sellerEarnings,
+        }),
       });
 
       return res.status(201).json({ link: newLink });
@@ -1093,9 +1370,12 @@ export function createApp(customStore?: RelationalStore) {
   );
 
   router.post('/coupons/validate', (req: Request, res: Response) => {
-    const { code, offerId, customerCpf, sellerId, campaignId } = req.body || {};
+    const { code, offerId, linkCode, customerCpf, sellerId, campaignId } = req.body || {};
     const cleanCode = String(code || '').toUpperCase().trim();
     const coupon = store.state.coupons.find((c) => c.code === cleanCode);
+    const link = linkCode
+      ? store.state.offerLinks.find((l) => l.code.toUpperCase() === String(linkCode).toUpperCase())
+      : undefined;
 
     if (!coupon) {
       return res.status(404).json({ valid: false, error: 'Cupom não encontrado.' });
@@ -1109,13 +1389,16 @@ export function createApp(customStore?: RelationalStore) {
     if (coupon.currentUses >= coupon.maxUsesGlobal) {
       return res.status(422).json({ valid: false, error: 'Limite global de uso do cupom excedido.' });
     }
-    if (coupon.authorizedOfferId && offerId && coupon.authorizedOfferId !== offerId) {
+    const targetOfferId = link?.offerId || offerId;
+    if (coupon.authorizedOfferId && targetOfferId && coupon.authorizedOfferId !== targetOfferId) {
       return res.status(422).json({ valid: false, error: 'Cupom não autorizado para esta oferta.' });
     }
-    if (coupon.authorizedSellerId && sellerId && coupon.authorizedSellerId !== sellerId) {
+    const targetSellerId = link?.sellerId || sellerId;
+    if (coupon.authorizedSellerId && targetSellerId && coupon.authorizedSellerId !== targetSellerId) {
       return res.status(422).json({ valid: false, error: 'Cupom exclusivo de outro consultor.' });
     }
-    if (coupon.authorizedCampaignId && campaignId && coupon.authorizedCampaignId !== campaignId) {
+    const targetCampaignId = link?.campaignId || campaignId;
+    if (coupon.authorizedCampaignId && targetCampaignId && coupon.authorizedCampaignId !== targetCampaignId) {
       return res.status(422).json({ valid: false, error: 'Cupom restrito a outra campanha.' });
     }
 
@@ -1132,15 +1415,19 @@ export function createApp(customStore?: RelationalStore) {
       }
     }
 
-    const offer = offerId ? store.state.offers.find((o) => o.id === offerId) : undefined;
+    const offer = targetOfferId ? store.state.offers.find((o) => o.id === targetOfferId) : undefined;
+    const effectivePrice =
+      link && link.salePrice !== undefined
+        ? Number(link.salePrice)
+        : offer?.promotionalPrice || 0;
     let discountAmount = 0;
-    if (offer) {
+    if (offer && effectivePrice > 0) {
       discountAmount =
         coupon.discountType === 'PERCENTAGE'
-          ? Number(((offer.promotionalPrice * coupon.discountValue) / 100).toFixed(2))
-          : Math.min(offer.promotionalPrice, coupon.discountValue);
+          ? Number(((effectivePrice * coupon.discountValue) / 100).toFixed(2))
+          : Math.min(effectivePrice, coupon.discountValue);
 
-      const effectiveCouponPct = (discountAmount / offer.promotionalPrice) * 100;
+      const effectiveCouponPct = (discountAmount / effectivePrice) * 100;
       if (effectiveCouponPct > offer.maxCouponDiscountPercent + 0.01) {
         return res.status(422).json({
           valid: false,
@@ -1241,7 +1528,29 @@ export function createApp(customStore?: RelationalStore) {
       idempotencyKey,
     } = req.body || {};
 
-    const offer = store.state.offers.find((o) => o.id === offerId);
+    // Resolve OfferLink first when linkCode is provided
+    const link = linkCode
+      ? store.state.offerLinks.find((l) => l.code.toUpperCase() === String(linkCode).toUpperCase())
+      : undefined;
+
+    if (linkCode && !link && !store.state.offers.some((o) => o.code.toUpperCase() === String(linkCode).toUpperCase())) {
+      return res.status(404).json({ error: 'Link de negociação não encontrado.' });
+    }
+
+    if (link) {
+      if (link.status !== 'ACTIVE') {
+        return res.status(422).json({ error: 'Este link de negociação está inativo.' });
+      }
+      if (new Date(link.expiresAt).getTime() < Date.now()) {
+        return res.status(422).json({ error: 'Este link de negociação expirou.' });
+      }
+      if (offerId && offerId !== link.offerId) {
+        return res.status(422).json({ error: 'O link informado não pertence à oferta selecionada.' });
+      }
+    }
+
+    const resolvedOfferId = link?.offerId || offerId;
+    const offer = store.state.offers.find((o) => o.id === resolvedOfferId);
     if (!offer) {
       return res.status(404).json({ error: 'Oferta não encontrada.' });
     }
@@ -1274,14 +1583,15 @@ export function createApp(customStore?: RelationalStore) {
       });
     }
 
-    // Resolve attribution (CLIENT = belongs to operation; SALE = attributed to seller)
-    const link = linkCode
-      ? store.state.offerLinks.find((l) => l.code.toUpperCase() === String(linkCode).toUpperCase())
-      : undefined;
+    // Resolve attribution (CLIENT = belongs to operation; SALE = attributed to seller & specific OfferLink)
     const attributedSellerId = link?.sellerId || offer.sellerId || 'usr_seller_01';
     const seller = store.state.users.find((u) => u.id === attributedSellerId);
     const attributedCampaignId = link?.campaignId || offer.campaignId || 'cmp_01';
     const campaign = store.state.campaigns.find((c) => c.id === attributedCampaignId);
+
+    // Authoritative price comes strictly from the OfferLink snapshot (if present) or Offer. Customer cannot alter price.
+    const negotiatedSalePrice =
+      link && link.salePrice !== undefined ? Number(link.salePrice) : offer.promotionalPrice;
 
     // Validate coupon if provided
     let discount = 0;
@@ -1320,10 +1630,10 @@ export function createApp(customStore?: RelationalStore) {
       }
       discount =
         appliedCoupon.discountType === 'PERCENTAGE'
-          ? Number(((offer.promotionalPrice * appliedCoupon.discountValue) / 100).toFixed(2))
-          : Math.min(offer.promotionalPrice, appliedCoupon.discountValue);
+          ? Number(((negotiatedSalePrice * appliedCoupon.discountValue) / 100).toFixed(2))
+          : Math.min(negotiatedSalePrice, appliedCoupon.discountValue);
 
-      const effectiveCouponPct = (discount / offer.promotionalPrice) * 100;
+      const effectiveCouponPct = (discount / negotiatedSalePrice) * 100;
       if (effectiveCouponPct > offer.maxCouponDiscountPercent + 0.01) {
         return res.status(422).json({
           error: `Desconto do cupom excede o teto permitido para esta oferta (${offer.maxCouponDiscountPercent}%).`,
@@ -1332,7 +1642,7 @@ export function createApp(customStore?: RelationalStore) {
     }
 
     const shippingCost = offer.freeShipping ? 0 : chosenShipping.price;
-    const subtotal = offer.promotionalPrice;
+    const subtotal = negotiatedSalePrice;
     const total = Number(Math.max(1, subtotal - discount + shippingCost).toFixed(2));
 
     const idemKey = String(idempotencyKey || `idem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
@@ -1414,7 +1724,9 @@ export function createApp(customStore?: RelationalStore) {
       sellerId: seller?.id || null,
       sellerName: seller?.name || 'Venda Direta Operação',
       offerId: offer.id,
-      offerName: offer.name,
+      offerName: link?.offerName || offer.name,
+      offerLinkId: link?.id || null,
+      offerLinkCode: link?.code || null,
       campaignId: campaign?.id || null,
       campaignName: campaign?.name || 'Tráfego Direto',
       couponCode: appliedCoupon?.code || null,
@@ -1423,7 +1735,7 @@ export function createApp(customStore?: RelationalStore) {
         sku: item.sku,
         productName: item.productName,
         quantity: item.quantity,
-        unitPrice: Number((offer.promotionalPrice / offer.totalUnits).toFixed(2)),
+        unitPrice: Number((subtotal / offer.totalUnits).toFixed(2)),
         unitCost: item.unitCost,
       })),
       subtotal,
@@ -1485,21 +1797,47 @@ export function createApp(customStore?: RelationalStore) {
       });
     }
 
-    // Freeze seller commission on the order at creation time so retroactive rule changes never alter old orders
+    // Freeze seller commission + surplus on the order at creation time so retroactive rule changes never alter old orders
     if (seller) {
       const calcBase = Number((subtotal - discount).toFixed(2));
-      const pct = seller.commissionRate || store.state.unitEconomicsConfig.defaultCommissionPercent;
+      const basePrice = link
+        ? Number(link.basePrice ?? offer.basePrice ?? offer.promotionalPrice)
+        : Number(offer.basePrice ?? offer.promotionalPrice);
+      const pct = link
+        ? Number(link.commissionPercent)
+        : seller.commissionRate ||
+          offer.commissionPercent ||
+          store.state.unitEconomicsConfig.defaultCommissionPercent;
+
+      const commissionAmount =
+        link && discount === 0 && link.commissionAmount !== undefined
+          ? Number(link.commissionAmount)
+          : Number(((calcBase * pct) / 100).toFixed(2));
+      const surplusAmount =
+        link && discount === 0 && link.surplusAmount !== undefined
+          ? Number(link.surplusAmount)
+          : Number(Math.max(0, calcBase - basePrice).toFixed(2));
+      const totalEarnings =
+        link && discount === 0 && link.sellerEarnings !== undefined
+          ? Number(link.sellerEarnings)
+          : Number((commissionAmount + surplusAmount).toFixed(2));
+
       store.state.commissions.unshift({
-        id: `com_${Date.now()}`,
+        id: `com_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         sellerId: seller.id,
         sellerName: seller.name,
         orderId: newOrder.id,
         orderNumber: newOrder.orderNumber,
+        offerLinkId: link?.id || null,
+        offerLinkCode: link?.code || null,
         calculationBase: calcBase,
+        basePrice,
         percentage: pct,
-        amount: Number(((calcBase * pct) / 100).toFixed(2)),
+        commissionAmount,
+        surplusAmount,
+        amount: totalEarnings,
         status: 'PENDING',
-        ruleUsed: `REGRA_CONGELADA_${seller.sellerCode || 'SELLER'}_${pct}PCT_EM_${now.slice(0, 10)}`,
+        ruleUsed: `REGRA_CONGELADA_${seller.sellerCode || 'SELLER'}_${pct}PCT_BASE_${basePrice}_EXCEDENTE_${surplusAmount}_EM_${now.slice(0, 10)}`,
         createdAt: now,
       });
     }

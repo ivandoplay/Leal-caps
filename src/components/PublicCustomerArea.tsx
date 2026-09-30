@@ -335,6 +335,7 @@ export const PublicCustomerArea: React.FC<{
         body: JSON.stringify({
           code: codeToTest,
           offerId: offerData.offer.id,
+          linkCode: offerCode,
           customerCpf: customer.cpf || undefined,
           sellerId: offerData.seller?.id,
           campaignId: offerData.campaign?.id,
@@ -513,7 +514,7 @@ export const PublicCustomerArea: React.FC<{
   };
 
   const regularPrice = offerData?.offer.regularPrice || 0;
-  const subtotal = offerData?.offer.promotionalPrice || 0;
+  const subtotal = offerData?.link?.salePrice ?? offerData?.offer.promotionalPrice ?? 0;
   const offerSavings = Math.max(0, regularPrice - subtotal);
   const discount = appliedCoupon?.discountAmount || 0;
   const shippingPrice = offerData?.offer.freeShipping ? 0 : selectedShipping?.price || 0;
@@ -1262,12 +1263,6 @@ export const PublicCustomerArea: React.FC<{
                         <strong className="text-[var(--text-primary)]">Modo de uso: </strong>
                         {cleanText(offerData.products[0].usageInstructions)}
                       </div>
-                    )}
-
-                    {offerData.products[0]?.warnings && (
-                      <p className="text-[10px] text-[var(--text-muted)] pt-2 border-t border-[var(--border-subtle)] leading-relaxed">
-                        {cleanText(offerData.products[0].warnings)}
-                      </p>
                     )}
                   </div>
                 </div>
