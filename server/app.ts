@@ -24,6 +24,8 @@ import {
   Payment,
   PaymentStatus,
   Product,
+  ProductClaim,
+  ProductDocument,
   RoleType,
   Shipment,
   User,
@@ -214,6 +216,14 @@ export function createApp(customStore?: RelationalStore) {
     return res.json({ products: store.state.products });
   });
 
+  router.get('/products/:id', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+    const product = store.state.products.find(
+      (p) => p.id === req.params.id || p.sku.toUpperCase() === req.params.id.toUpperCase()
+    );
+    if (!product) return res.status(404).json({ error: 'Produto não encontrado.' });
+    return res.json({ product });
+  });
+
   router.post(
     '/products',
     requireAuth,
@@ -221,30 +231,74 @@ export function createApp(customStore?: RelationalStore) {
     (req: AuthenticatedRequest, res: Response) => {
       const body = req.body || {};
       if (!body.sku || !body.commercialName || !body.internalName || !body.category) {
-        return res.status(400).json({ error: 'Campos obrigatórios: sku, internalName, commercialName, category.' });
+        return res
+          .status(400)
+          .json({ error: 'Campos obrigatórios: sku, internalName, commercialName, category.' });
       }
-      if (store.state.products.some((p) => p.sku.toUpperCase() === String(body.sku).toUpperCase())) {
+      const normalizedSku = String(body.sku).trim().toUpperCase();
+      if (store.state.products.some((p) => p.sku.toUpperCase() === normalizedSku)) {
         return res.status(409).json({ error: 'Já existe um produto cadastrado com este SKU.' });
       }
 
       const now = new Date().toISOString();
+      const prodId = `prd_${Date.now()}`;
       const newProduct: Product = {
-        id: `prd_${Date.now()}`,
-        sku: String(body.sku).toUpperCase(),
-        internalName: String(body.internalName),
-        commercialName: String(body.commercialName),
+        id: prodId,
+        sku: normalizedSku,
+        internalName: String(body.internalName).trim(),
+        commercialName: String(body.commercialName).trim(),
         category: body.category,
         description: String(body.description || ''),
         composition: String(body.composition || ''),
         presentation: String(body.presentation || 'Frasco 60 cápsulas'),
-        unitQuantity: Number(body.unitQuantity || 60),
-        images: Array.isArray(body.images) ? body.images : [],
-        documents: Array.isArray(body.documents) ? body.documents : [],
+        unitQuantity: Number(body.unitQuantity ?? 60),
+        images:
+          Array.isArray(body.images) && body.images.length > 0
+            ? body.images.map((img: Record<string, unknown>, idx: number) => ({
+                id: String(img.id || `img_${Date.now()}_${idx}`),
+                productId: prodId,
+                url: String(
+                  img.url || '/src/assets/images/product_lipotherm_pro_1790723418728.jpg'
+                ),
+                altText: String(img.altText || body.commercialName),
+                isPrimary: idx === 0 ? true : Boolean(img.isPrimary),
+              }))
+            : [
+                {
+                  id: `img_${Date.now()}`,
+                  productId: prodId,
+                  url: '/src/assets/images/product_lipotherm_pro_1790723418728.jpg',
+                  altText: String(body.commercialName),
+                  isPrimary: true,
+                },
+              ],
+        documents: Array.isArray(body.documents)
+          ? body.documents.map((doc: Record<string, unknown>, idx: number) => ({
+              id: String(doc.id || `doc_${Date.now()}_${idx}`),
+              productId: prodId,
+              title: String(doc.title || 'Documento Regulatório'),
+              docType:
+                (doc.docType as ProductDocument['docType']) || 'NOTIFICACAO_ANVISA',
+              fileUrl: String(doc.fileUrl || `/docs/${normalizedSku.toLowerCase()}-doc.pdf`),
+              version: String(doc.version || 'v1.0'),
+              status: (doc.status as ProductDocument['status']) || 'VALID',
+              uploadedBy: req.user!.id,
+              uploadedAt: String(doc.uploadedAt || now),
+            }))
+          : [],
         batchNumber: String(body.batchNumber || 'LT-2026-NEW'),
         expiryDate: String(body.expiryDate || '2028-12-31'),
         status: body.status || 'INACTIVE',
         regulatoryInfo: String(body.regulatoryInfo || 'RDC 240/2018'),
-        approvedClaims: Array.isArray(body.approvedClaims) ? body.approvedClaims : [],
+        approvedClaims: Array.isArray(body.approvedClaims)
+          ? body.approvedClaims.map((clm: Record<string, unknown>, idx: number) => ({
+              id: String(clm.id || `clm_${Date.now()}_${idx}`),
+              productId: prodId,
+              claimText: String(clm.claimText || ''),
+              regulatoryBasis: String(clm.regulatoryBasis || 'IN ANVISA nº 28/2018'),
+              status: (clm.status as ProductClaim['status']) || 'APPROVED',
+            }))
+          : [],
         warnings: String(
           body.warnings ||
             'ESTE PRODUTO NÃO É UM MEDICAMENTO. NÃO EXCEDER A RECOMENDAÇÃO DIÁRIA DE CONSUMO INDICADA NA EMBALAGEM.'
@@ -252,14 +306,15 @@ export function createApp(customStore?: RelationalStore) {
         usageInstructions: String(body.usageInstructions || 'Ingerir 2 cápsulas ao dia.'),
         restrictions: String(body.restrictions || 'Uso adulto.'),
         labelingInfo: String(body.labelingInfo || 'RDC 429/2020'),
-        unitCost: Number(body.unitCost || 25.0),
-        stockQuantity: Number(body.stockQuantity || 100),
+        unitCost: Number(body.unitCost ?? 25.0),
+        stockQuantity: Number(body.stockQuantity ?? 100),
         complianceStatus: body.complianceStatus || 'DRAFT',
         createdAt: now,
         updatedAt: now,
       };
 
       store.state.products.unshift(newProduct);
+      store.save();
       store.appendAuditLog({
         userId: req.user!.id,
         userName: req.user!.name,
@@ -285,13 +340,47 @@ export function createApp(customStore?: RelationalStore) {
       const product = store.state.products.find((p) => p.id === req.params.id);
       if (!product) return res.status(404).json({ error: 'Produto não encontrado.' });
 
+      if (req.body.sku !== undefined) {
+        const nextSku = String(req.body.sku).trim().toUpperCase();
+        if (!nextSku) {
+          return res.status(400).json({ error: 'O SKU do produto não pode ficar vazio.' });
+        }
+        const duplicateSku = store.state.products.some(
+          (p) => p.id !== product.id && p.sku.toUpperCase() === nextSku
+        );
+        if (duplicateSku) {
+          return res.status(409).json({ error: 'Já existe outro produto cadastrado com este SKU.' });
+        }
+        req.body.sku = nextSku;
+      }
+
+      if (req.body.unitCost !== undefined && Number(req.body.unitCost) < 0) {
+        return res.status(422).json({ error: 'O custo unitário não pode ser negativo.' });
+      }
+      if (req.body.stockQuantity !== undefined && Number(req.body.stockQuantity) < 0) {
+        return res.status(422).json({ error: 'A quantidade em estoque não pode ser negativa.' });
+      }
+
       const prevSnapshot = JSON.stringify({
         status: product.status,
         unitCost: product.unitCost,
+        stockQuantity: product.stockQuantity,
         complianceStatus: product.complianceStatus,
       });
 
       Object.assign(product, req.body, { id: product.id, updatedAt: new Date().toISOString() });
+
+      // Propagate compliance status if there is a linked PRODUTO compliance review
+      if (req.body.complianceStatus) {
+        const linkedReview = store.state.complianceReviews.find(
+          (r) => r.targetType === 'PRODUTO' && r.targetId === product.id
+        );
+        if (linkedReview) {
+          linkedReview.status = product.complianceStatus;
+          linkedReview.updatedAt = product.updatedAt;
+        }
+      }
+
       store.save();
 
       store.appendAuditLog({
@@ -305,6 +394,7 @@ export function createApp(customStore?: RelationalStore) {
         newValue: JSON.stringify({
           status: product.status,
           unitCost: product.unitCost,
+          stockQuantity: product.stockQuantity,
           complianceStatus: product.complianceStatus,
         }),
         ip: req.ip || '127.0.0.1',
@@ -324,18 +414,38 @@ export function createApp(customStore?: RelationalStore) {
       if (!source) return res.status(404).json({ error: 'Produto original não encontrado.' });
 
       const now = new Date().toISOString();
+      const copyId = `prd_${Date.now()}`;
+      const copySku = `${source.sku}-COPY-${Math.floor(Math.random() * 90 + 10)}`;
+      const clonedSource: Product = JSON.parse(JSON.stringify(source));
+
       const copy: Product = {
-        ...JSON.parse(JSON.stringify(source)),
-        id: `prd_${Date.now()}`,
-        sku: `${source.sku}-COPY-${Math.floor(Math.random() * 90 + 10)}`,
+        ...clonedSource,
+        id: copyId,
+        sku: copySku,
         internalName: `${source.internalName} (Cópia)`,
         commercialName: `${source.commercialName} (Cópia)`,
         status: 'INACTIVE',
         complianceStatus: 'DRAFT',
+        images: (clonedSource.images || []).map((img, idx) => ({
+          ...img,
+          id: `img_${Date.now()}_${idx}`,
+          productId: copyId,
+        })),
+        documents: (clonedSource.documents || []).map((doc, idx) => ({
+          ...doc,
+          id: `doc_${Date.now()}_${idx}`,
+          productId: copyId,
+        })),
+        approvedClaims: (clonedSource.approvedClaims || []).map((clm, idx) => ({
+          ...clm,
+          id: `clm_${Date.now()}_${idx}`,
+          productId: copyId,
+        })),
         createdAt: now,
         updatedAt: now,
       };
       store.state.products.unshift(copy);
+      store.save();
       store.appendAuditLog({
         userId: req.user!.id,
         userName: req.user!.name,
@@ -349,6 +459,152 @@ export function createApp(customStore?: RelationalStore) {
         metadata: '{}',
       });
       return res.status(201).json({ product: copy });
+    }
+  );
+
+  router.post(
+    '/products/:id/documents',
+    requireAuth,
+    requireRole(['ADMIN']),
+    (req: AuthenticatedRequest, res: Response) => {
+      const product = store.state.products.find((p) => p.id === req.params.id);
+      if (!product) return res.status(404).json({ error: 'Produto não encontrado.' });
+
+      const { title, docType, version, fileUrl, status } = req.body || {};
+      if (!title || !String(title).trim()) {
+        return res.status(400).json({ error: 'O título do documento é obrigatório.' });
+      }
+
+      const now = new Date().toISOString();
+      const newDoc: ProductDocument = {
+        id: `doc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        productId: product.id,
+        title: String(title).trim(),
+        docType: docType || 'LAUDO_TECNICO',
+        fileUrl:
+          fileUrl ||
+          `/docs/${product.sku.toLowerCase()}-${Date.now().toString().slice(-4)}.pdf`,
+        version: String(version || 'v1.0').trim(),
+        status: status || 'VALID',
+        uploadedBy: req.user!.id,
+        uploadedAt: now,
+      };
+
+      product.documents.push(newDoc);
+      product.updatedAt = now;
+      store.save();
+
+      store.appendAuditLog({
+        userId: req.user!.id,
+        userName: req.user!.name,
+        userRole: req.user!.role,
+        action: 'DOCUMENTO_PRODUTO_ANEXADO',
+        entity: 'ProductDocument',
+        entityId: newDoc.id,
+        previousValue: '-',
+        newValue: `${product.sku}: ${newDoc.title} (${newDoc.version})`,
+        ip: req.ip || '127.0.0.1',
+        metadata: JSON.stringify({ productId: product.id, docType: newDoc.docType }),
+      });
+
+      return res.status(201).json({ product, document: newDoc });
+    }
+  );
+
+  router.delete(
+    '/products/:id/documents/:docId',
+    requireAuth,
+    requireRole(['ADMIN']),
+    (req: AuthenticatedRequest, res: Response) => {
+      const product = store.state.products.find((p) => p.id === req.params.id);
+      if (!product) return res.status(404).json({ error: 'Produto não encontrado.' });
+
+      const docIndex = product.documents.findIndex((d) => d.id === req.params.docId);
+      if (docIndex === -1) {
+        return res.status(404).json({ error: 'Documento não encontrado neste produto.' });
+      }
+
+      const [removed] = product.documents.splice(docIndex, 1);
+      product.updatedAt = new Date().toISOString();
+      store.save();
+
+      store.appendAuditLog({
+        userId: req.user!.id,
+        userName: req.user!.name,
+        userRole: req.user!.role,
+        action: 'DOCUMENTO_PRODUTO_REMOVIDO',
+        entity: 'ProductDocument',
+        entityId: removed.id,
+        previousValue: removed.title,
+        newValue: 'REMOVED',
+        ip: req.ip || '127.0.0.1',
+        metadata: JSON.stringify({ productId: product.id }),
+      });
+
+      return res.json({ product });
+    }
+  );
+
+  router.post(
+    '/products/:id/claims',
+    requireAuth,
+    requireRole(['ADMIN']),
+    (req: AuthenticatedRequest, res: Response) => {
+      const product = store.state.products.find((p) => p.id === req.params.id);
+      if (!product) return res.status(404).json({ error: 'Produto não encontrado.' });
+
+      const { claimText, regulatoryBasis, status } = req.body || {};
+      if (!claimText || !String(claimText).trim()) {
+        return res.status(400).json({ error: 'O texto da alegação funcional é obrigatório.' });
+      }
+
+      const newClaim: ProductClaim = {
+        id: `clm_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        productId: product.id,
+        claimText: String(claimText).trim(),
+        regulatoryBasis: String(regulatoryBasis || 'IN ANVISA nº 28/2018 - Anexo V').trim(),
+        status: status || 'APPROVED',
+      };
+
+      product.approvedClaims.push(newClaim);
+      product.updatedAt = new Date().toISOString();
+      store.save();
+
+      store.appendAuditLog({
+        userId: req.user!.id,
+        userName: req.user!.name,
+        userRole: req.user!.role,
+        action: 'CLAIM_PRODUTO_ADICIONADO',
+        entity: 'ProductClaim',
+        entityId: newClaim.id,
+        previousValue: '-',
+        newValue: `${product.sku}: ${newClaim.claimText}`,
+        ip: req.ip || '127.0.0.1',
+        metadata: JSON.stringify({ productId: product.id }),
+      });
+
+      return res.status(201).json({ product, claim: newClaim });
+    }
+  );
+
+  router.delete(
+    '/products/:id/claims/:claimId',
+    requireAuth,
+    requireRole(['ADMIN']),
+    (req: AuthenticatedRequest, res: Response) => {
+      const product = store.state.products.find((p) => p.id === req.params.id);
+      if (!product) return res.status(404).json({ error: 'Produto não encontrado.' });
+
+      const claimIndex = product.approvedClaims.findIndex((c) => c.id === req.params.claimId);
+      if (claimIndex === -1) {
+        return res.status(404).json({ error: 'Alegação não encontrada neste produto.' });
+      }
+
+      product.approvedClaims.splice(claimIndex, 1);
+      product.updatedAt = new Date().toISOString();
+      store.save();
+
+      return res.json({ product });
     }
   );
 
@@ -632,7 +888,7 @@ export function createApp(customStore?: RelationalStore) {
       });
     }
 
-    if (new Date(offer.endsAt).getTime() < Date.now()) {
+    if (new Date(offer.endsAt).getTime() < Date.now() || (link && new Date(link.expiresAt).getTime() < Date.now())) {
       return res.status(422).json({ error: 'Esta oferta expirou.', code: 'OFFER_EXPIRED' });
     }
 
@@ -914,9 +1170,9 @@ export function createApp(customStore?: RelationalStore) {
       shippingProvider.simulatePrimaryDown = false;
 
       // Apply free shipping if offer grants it
-      const options = quoteResult.options.map((opt, idx) => ({
+      const options = quoteResult.options.map((opt) => ({
         ...opt,
-        price: offer?.freeShipping && idx === 1 ? 0 : opt.price,
+        price: offer?.freeShipping ? 0 : opt.price,
       }));
 
       return res.json({ ...quoteResult, options });
@@ -1018,6 +1274,15 @@ export function createApp(customStore?: RelationalStore) {
       });
     }
 
+    // Resolve attribution (CLIENT = belongs to operation; SALE = attributed to seller)
+    const link = linkCode
+      ? store.state.offerLinks.find((l) => l.code.toUpperCase() === String(linkCode).toUpperCase())
+      : undefined;
+    const attributedSellerId = link?.sellerId || offer.sellerId || 'usr_seller_01';
+    const seller = store.state.users.find((u) => u.id === attributedSellerId);
+    const attributedCampaignId = link?.campaignId || offer.campaignId || 'cmp_01';
+    const campaign = store.state.campaigns.find((c) => c.id === attributedCampaignId);
+
     // Validate coupon if provided
     let discount = 0;
     let appliedCoupon: Coupon | undefined;
@@ -1032,6 +1297,26 @@ export function createApp(customStore?: RelationalStore) {
       }
       if (appliedCoupon.currentUses >= appliedCoupon.maxUsesGlobal) {
         return res.status(422).json({ error: 'Cupom atingiu o limite máximo de utilizações.' });
+      }
+      if (appliedCoupon.authorizedOfferId && appliedCoupon.authorizedOfferId !== offer.id) {
+        return res.status(422).json({ error: 'Cupom não autorizado para esta oferta.' });
+      }
+      if (appliedCoupon.authorizedSellerId && appliedCoupon.authorizedSellerId !== attributedSellerId) {
+        return res.status(422).json({ error: 'Cupom exclusivo de outro consultor.' });
+      }
+      if (appliedCoupon.authorizedCampaignId && appliedCoupon.authorizedCampaignId !== attributedCampaignId) {
+        return res.status(422).json({ error: 'Cupom restrito a outra campanha.' });
+      }
+      if (customer.cpf) {
+        const cleanCpf = String(customer.cpf).replace(/\D/g, '');
+        const customerUsages = store.state.couponUsages.filter(
+          (u) => u.couponId === appliedCoupon!.id && u.customerCpf.replace(/\D/g, '') === cleanCpf
+        );
+        if (customerUsages.length >= appliedCoupon.maxUsesPerCustomer) {
+          return res.status(422).json({
+            error: 'Limite de utilização deste cupom por CPF já foi atingido.',
+          });
+        }
       }
       discount =
         appliedCoupon.discountType === 'PERCENTAGE'
@@ -1060,29 +1345,20 @@ export function createApp(customStore?: RelationalStore) {
     const orderNumber = `#LC-${orderSeq}`;
     const orderId = `ord_${orderSeq}`;
 
-    // Resolve attribution (CLIENT = belongs to operation; SALE = attributed to seller)
-    const link = linkCode
-      ? store.state.offerLinks.find((l) => l.code.toUpperCase() === String(linkCode).toUpperCase())
-      : undefined;
-    const attributedSellerId = link?.sellerId || offer.sellerId || 'usr_seller_01';
-    const seller = store.state.users.find((u) => u.id === attributedSellerId);
-    const attributedCampaignId = link?.campaignId || offer.campaignId || 'cmp_01';
-    const campaign = store.state.campaigns.find((c) => c.id === attributedCampaignId);
-
     const newCustomer: Customer = {
       id: `cst_${Date.now()}`,
-      name: String(customer.name),
-      phone: String(customer.phone),
-      email: String(customer.email),
-      cpf: String(customer.cpf),
+      name: String(customer.name).trim(),
+      phone: String(customer.phone).trim(),
+      email: String(customer.email).trim(),
+      cpf: String(customer.cpf).trim(),
       cep: shippingQuote.cep,
-      street: String(customer.street || shippingQuote.street),
-      number: String(customer.number),
-      complement: customer.complement ? String(customer.complement) : undefined,
-      neighborhood: String(customer.neighborhood || shippingQuote.neighborhood),
-      city: String(customer.city || shippingQuote.city),
-      state: String(customer.state || shippingQuote.state),
-      marketingOptIn: true,
+      street: String(customer.street || shippingQuote.street).trim(),
+      number: String(customer.number).trim(),
+      complement: customer.complement ? String(customer.complement).trim() : undefined,
+      neighborhood: String(customer.neighborhood || shippingQuote.neighborhood || 'Centro').trim(),
+      city: String(customer.city || shippingQuote.city).trim(),
+      state: String(customer.state || shippingQuote.state).trim().toUpperCase(),
+      marketingOptIn: customer.marketingOptIn !== undefined ? Boolean(customer.marketingOptIn) : true,
       anonymized: false,
       createdAt: now,
     };

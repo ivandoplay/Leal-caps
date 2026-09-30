@@ -156,6 +156,25 @@ const brlCurrencyFormatter = new Intl.NumberFormat('pt-BR', {
 
 export const formatCurrencyBRL = (value: number): string => brlCurrencyFormatter.format(value);
 
+const brlIntegerFormatter = new Intl.NumberFormat('pt-BR');
+export const formatIntegerBR = (value: number): string => brlIntegerFormatter.format(value);
+
+export const formatDateBR = (dateStr: string): string => {
+  if (!dateStr) return '—';
+  // Handle YYYY-MM-DD without timezone shift
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}/${year}`;
+  }
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return dateStr;
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date);
+};
+
 export const formatOrderDateTimeBR = (isoDate: string): string => {
   const date = new Date(isoDate);
   if (Number.isNaN(date.getTime())) return '';
@@ -245,6 +264,33 @@ export const Badge: React.FC<{
   );
 };
 
+const STATUS_LABELS_PT: Record<string, string> = {
+  ACTIVE: 'Ativo',
+  INACTIVE: 'Inativo',
+  ARCHIVED: 'Arquivado',
+  DRAFT: 'Rascunho',
+  UNDER_REVIEW: 'Em revisão',
+  APPROVED: 'Aprovado',
+  REJECTED: 'Rejeitado',
+  EXPIRED: 'Expirado',
+  VALID: 'Válido',
+  PENDING: 'Pendente',
+  PAID: 'Pago',
+  CANCELLED: 'Cancelado',
+  DELIVERED: 'Entregue',
+  SHIPPED: 'Enviado',
+  IN_TRANSIT: 'Em trânsito',
+  WAITING: 'Aguardando',
+  PICKING: 'Em separação',
+  PACKING: 'Em embalagem',
+  READY_TO_SHIP: 'Pronto p/ envio',
+  EXCEPTION: 'Com problema',
+  RETURNED: 'Devolvido',
+  DECLINED: 'Recusado',
+  REFUNDED: 'Reembolsado',
+  CHARGEBACK: 'Chargeback',
+};
+
 export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   const normalized = String(status || '').toUpperCase();
   let tone: 'lime' | 'cyan' | 'amber' | 'danger' | 'emerald' | 'slate' = 'slate';
@@ -261,15 +307,25 @@ export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
     )
   ) {
     tone = 'cyan';
+  } else if (['DRAFT', 'ARCHIVED'].includes(normalized)) {
+    tone = 'slate';
   } else if (
-    ['DECLINED', 'REFUNDED', 'CHARGEBACK', 'EXCEPTION', 'REJECTED', 'EXPIRED', 'INACTIVE'].includes(
-      normalized
-    )
+    [
+      'DECLINED',
+      'REFUNDED',
+      'CHARGEBACK',
+      'EXCEPTION',
+      'REJECTED',
+      'EXPIRED',
+      'INACTIVE',
+      'CANCELLED',
+    ].includes(normalized)
   ) {
     tone = 'danger';
   }
 
-  return <Badge tone={tone}>{status}</Badge>;
+  const label = STATUS_LABELS_PT[normalized] || status;
+  return <Badge tone={tone}>{label}</Badge>;
 };
 
 // ============================================================================
@@ -279,17 +335,23 @@ export const Modal: React.FC<{
   open: boolean;
   onClose: () => void;
   title: string;
+  subtitle?: string;
   children: React.ReactNode;
   maxWidth?: string;
-}> = ({ open, onClose, title, children, maxWidth = 'max-w-2xl' }) => {
+}> = ({ open, onClose, title, subtitle, children, maxWidth = 'max-w-2xl' }) => {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 overflow-y-auto">
       <div
         className={`modern-card rounded-2xl w-full ${maxWidth} shadow-2xl overflow-hidden my-8`}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-subtle)]/50">
-          <h3 className="text-base font-bold text-[var(--text-primary)] tracking-tight">{title}</h3>
+        <div className="flex items-start justify-between gap-4 px-6 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-subtle)]/50">
+          <div>
+            <h3 className="text-base font-bold text-[var(--text-primary)] tracking-tight">{title}</h3>
+            {subtitle && (
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5">{subtitle}</p>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1.5 rounded-xl hover:bg-[var(--bg-subtle)] cursor-pointer transition-colors"
@@ -297,7 +359,7 @@ export const Modal: React.FC<{
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="p-6 max-h-[80vh] overflow-y-auto">{children}</div>
+        <div className="p-6 max-h-[82vh] overflow-y-auto">{children}</div>
       </div>
     </div>
   );
@@ -307,20 +369,33 @@ export const Drawer: React.FC<{
   open: boolean;
   onClose: () => void;
   title: string;
+  subtitle?: string;
+  headerActions?: React.ReactNode;
+  maxWidth?: string;
   children: React.ReactNode;
-}> = ({ open, onClose, title, children }) => {
+}> = ({ open, onClose, title, subtitle, headerActions, maxWidth = 'max-w-2xl', children }) => {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/60 backdrop-blur-sm">
-      <div className="modern-card border-l border-[var(--border-subtle)] w-full max-w-xl h-full flex flex-col shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-subtle)]/50">
-          <h3 className="text-base font-bold text-[var(--text-primary)]">{title}</h3>
-          <button
-            onClick={onClose}
-            className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1.5 rounded-xl cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
+      <div
+        className={`modern-card border-l border-[var(--border-subtle)] w-full ${maxWidth} h-full flex flex-col shadow-2xl`}
+      >
+        <div className="flex items-start justify-between gap-4 px-6 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-subtle)]/50">
+          <div className="min-w-0">
+            <h3 className="text-base font-bold text-[var(--text-primary)] truncate">{title}</h3>
+            {subtitle && (
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5 truncate">{subtitle}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {headerActions}
+            <button
+              onClick={onClose}
+              className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1.5 rounded-xl hover:bg-[var(--bg-subtle)] cursor-pointer transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
         <div className="p-6 flex-1 overflow-y-auto">{children}</div>
       </div>

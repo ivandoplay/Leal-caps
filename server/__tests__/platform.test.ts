@@ -113,6 +113,64 @@ describe('LEAL CAPS — Suite Completa de Testes Operacionais, Comerciais e de S
       expect(res.status).toBe(200);
       expect(res.body.fallbackActivated).toBe(true);
     });
+
+    it('deve aplicar frete grátis consistentemente e respeitar marketingOptIn e restrições de cupom no checkout', async () => {
+      const freeShipQuote = await request(app)
+        .post('/api/shipping/quote')
+        .send({ cep: '01310-100', offerId: 'off_7xk29' });
+      expect(freeShipQuote.status).toBe(200);
+      expect(freeShipQuote.body.options.every((o: { price: number }) => o.price === 0)).toBe(true);
+
+      // VIP25 é exclusivo da oferta off_combo01 -> deve ser bloqueado na off_7xk29
+      const wrongOfferCouponRes = await request(app)
+        .post('/api/checkout')
+        .send({
+          offerId: 'off_7xk29',
+          couponCode: 'VIP25',
+          cep: '01310100',
+          paymentMethod: 'PIX',
+          customer: {
+            name: 'Cliente Cupom Restrito',
+            phone: '11999997777',
+            email: 'restrito@teste.com',
+            cpf: '123.456.789-00',
+            street: 'Av. Paulista',
+            number: '100',
+            neighborhood: 'Bela Vista',
+            city: 'São Paulo',
+            state: 'SP',
+            marketingOptIn: false,
+          },
+        });
+      expect(wrongOfferCouponRes.status).toBe(422);
+
+      // Checkout válido com marketingOptIn = false
+      const validCheckoutRes = await request(app)
+        .post('/api/checkout')
+        .send({
+          offerId: 'off_7xk29',
+          couponCode: 'LEAL10',
+          cep: '01310100',
+          paymentMethod: 'PIX',
+          customer: {
+            name: 'Cliente OptOut Marketing',
+            phone: '11999997777',
+            email: 'optout@teste.com',
+            cpf: '123.456.789-00',
+            street: 'Av. Paulista',
+            number: '100',
+            neighborhood: 'Bela Vista',
+            city: 'São Paulo',
+            state: 'SP',
+            marketingOptIn: false,
+          },
+        });
+      expect(validCheckoutRes.status).toBe(201);
+      const savedCustomer = store.state.customers.find(
+        (c) => c.id === validCheckoutRes.body.order.customerId
+      );
+      expect(savedCustomer?.marketingOptIn).toBe(false);
+    });
   });
 
   // ==========================================================================
@@ -327,6 +385,97 @@ describe('LEAL CAPS — Suite Completa de Testes Operacionais, Comerciais e de S
       expect(rawJson).not.toContain('345.678.901-22');
       expect(rawJson).not.toContain('1578');
       expect(rawJson).not.toContain('11988776655');
+    });
+  });
+
+  // ==========================================================================
+  // 7. TESTES DE CATÁLOGO DE PRODUTOS, DOCUMENTAÇÃO E CLAIMS
+  // ==========================================================================
+  describe('7. Catálogo de Produtos (criação, edição de estoque/custo, duplicação, documentos e claims)', () => {
+    it('deve cadastrar novo produto completo, bloquear SKU duplicado e permitir atualizar estoque e custo', async () => {
+      const createRes = await request(app)
+        .post('/api/products')
+        .set(ADMIN_AUTH)
+        .send({
+          sku: 'LC-VITA-60C',
+          internalName: 'Polivitamínico A-Z 60 Caps',
+          commercialName: 'Leal VitaComplex Pro 60 Cápsulas',
+          category: 'Massa magra',
+          presentation: 'Frasco 60 cápsulas',
+          unitQuantity: 60,
+          batchNumber: 'LT-2026-99V',
+          expiryDate: '2028-11-30',
+          unitCost: 18.5,
+          stockQuantity: 620,
+          status: 'ACTIVE',
+          complianceStatus: 'APPROVED',
+        });
+
+      expect(createRes.status).toBe(201);
+      expect(createRes.body.product.sku).toBe('LC-VITA-60C');
+      expect(createRes.body.product.stockQuantity).toBe(620);
+
+      // Bloquear criação com mesmo SKU
+      const dupSkuRes = await request(app)
+        .post('/api/products')
+        .set(ADMIN_AUTH)
+        .send({
+          sku: 'LC-VITA-60C',
+          internalName: 'Outro',
+          commercialName: 'Outro',
+          category: 'Massa magra',
+        });
+      expect(dupSkuRes.status).toBe(409);
+
+      // Atualizar estoque e custo unitário via PATCH
+      const patchRes = await request(app)
+        .patch(`/api/products/${createRes.body.product.id}`)
+        .set(ADMIN_AUTH)
+        .send({ stockQuantity: 850, unitCost: 17.9 });
+      expect(patchRes.status).toBe(200);
+      expect(patchRes.body.product.stockQuantity).toBe(850);
+      expect(patchRes.body.product.unitCost).toBe(17.9);
+    });
+
+    it('deve anexar e remover documentos regulatórios e alegações funcionais no produto', async () => {
+      const docRes = await request(app)
+        .post('/api/products/prd_04/documents')
+        .set(ADMIN_AUTH)
+        .send({
+          title: 'Notificação ANVISA NeuroSeren Night',
+          docType: 'NOTIFICACAO_ANVISA',
+          version: 'v1.1',
+        });
+      expect(docRes.status).toBe(201);
+      expect(docRes.body.product.documents.length).toBe(1);
+      const createdDocId = docRes.body.document.id;
+
+      const claimRes = await request(app)
+        .post('/api/products/prd_04/claims')
+        .set(ADMIN_AUTH)
+        .send({
+          claimText: 'A vitamina B6 auxilia no metabolismo energético.',
+          regulatoryBasis: 'IN ANVISA nº 28/2018 - Anexo V',
+        });
+      expect(claimRes.status).toBe(201);
+      expect(claimRes.body.product.approvedClaims.length).toBeGreaterThan(1);
+
+      const delDocRes = await request(app)
+        .delete(`/api/products/prd_04/documents/${createdDocId}`)
+        .set(ADMIN_AUTH);
+      expect(delDocRes.status).toBe(200);
+      expect(delDocRes.body.product.documents.length).toBe(0);
+    });
+
+    it('deve duplicar produto existente gerando novo SKU, status INACTIVE e compliance DRAFT', async () => {
+      const dupRes = await request(app)
+        .post('/api/products/prd_01/duplicate')
+        .set(ADMIN_AUTH);
+      expect(dupRes.status).toBe(201);
+      expect(dupRes.body.product.sku).toContain('LC-THERM-60C-COPY-');
+      expect(dupRes.body.product.status).toBe('INACTIVE');
+      expect(dupRes.body.product.complianceStatus).toBe('DRAFT');
+      expect(dupRes.body.product.documents[0].productId).toBe(dupRes.body.product.id);
     });
   });
 });

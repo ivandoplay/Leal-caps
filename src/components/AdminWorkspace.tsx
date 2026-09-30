@@ -7,7 +7,9 @@ import {
   Copy,
   CreditCard,
   DollarSign,
+  Edit3,
   ExternalLink,
+  Eye,
   FileText,
   Layers,
   Link2,
@@ -20,6 +22,7 @@ import {
   Sliders,
   Sparkles,
   Tag,
+  Trash2,
   TrendingUp,
   Truck,
   UserCheck,
@@ -31,9 +34,12 @@ import {
   Badge,
   Button,
   Card,
+  Drawer,
   EmptyState,
   FileUploader,
   formatCurrencyBRL,
+  formatDateBR,
+  formatIntegerBR,
   formatOrderDateTimeBR,
   Input,
   KPI,
@@ -63,6 +69,8 @@ import {
   PRODUCT_CATEGORIES,
   Product,
   ProductCategory,
+  ProductClaim,
+  ProductDocument,
   Shipment,
   UnitEconomicsConfig,
   User,
@@ -127,6 +135,7 @@ export const AdminWorkspace: React.FC<{
 }> = ({
   section,
   setSection,
+  user,
   token,
   products,
   offers,
@@ -176,26 +185,113 @@ export const AdminWorkspace: React.FC<{
     customers[0]?.id || null
   );
 
+  // Catalog Filters & Product Detail Drawer State
+  const [productCategoryFilter, setProductCategoryFilter] = useState<string>('ALL');
+  const [productStatusFilter, setProductStatusFilter] = useState<
+    'ALL' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED'
+  >('ALL');
+  const [productComplianceFilter, setProductComplianceFilter] = useState<
+    'ALL' | 'APPROVED' | 'PENDING_REVIEW' | 'MISSING_DOCS'
+  >('ALL');
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [productDetailTab, setProductDetailTab] = useState<'GERAL' | 'ROTULO' | 'DOCUMENTOS'>(
+    'GERAL'
+  );
+  const [quickStockValue, setQuickStockValue] = useState<number>(0);
+  const [quickCostValue, setQuickCostValue] = useState<number>(0);
+
+  // Document & Claim Creation State inside Product Detail Drawer
+  const [newDocForm, setNewDocForm] = useState<{
+    title: string;
+    docType: ProductDocument['docType'];
+    version: string;
+  }>({
+    title: '',
+    docType: 'LAUDO_TECNICO',
+    version: 'v1.0',
+  });
+  const [newClaimForm, setNewClaimForm] = useState({
+    claimText: '',
+    regulatoryBasis: 'IN ANVISA nº 28/2018 - Anexo V',
+  });
+
   // Product Create/Edit Modal
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [prodForm, setProdForm] = useState({
-    sku: 'LC-META-100C',
-    internalName: 'Composto Metabólico Inositol + Cromo 100 Caps',
-    commercialName: 'Leal MetaControl 100 Cápsulas',
+
+  const getInitialProductForm = () => ({
+    sku: '',
+    internalName: '',
+    commercialName: '',
     category: 'Emagrecimento' as ProductCategory,
-    description: 'Suplemento alimentar em cápsulas com Picolinato de Cromo e Inositol.',
-    composition: 'Inositol (500mg), Picolinato de Cromo (250mcg), Bisglicinato de Magnésio (150mg).',
-    presentation: 'Frasco âmbar 100 cápsulas',
-    unitQuantity: 100,
-    batchNumber: 'LT-2026-10M',
-    expiryDate: '2028-10-30',
+    description: '',
+    composition: '',
+    presentation: 'Frasco 60 cápsulas',
+    unitQuantity: 60,
+    batchNumber: `LT-${new Date().getFullYear()}-01A`,
+    expiryDate: '2028-12-31',
     unitCost: 15.0,
     stockQuantity: 500,
-    regulatoryInfo: 'Suplemento alimentar notificado conforme exigência ANVISA.',
-    warnings: 'ESTE PRODUTO NÃO É UM MEDICAMENTO. NÃO EXCEDER A RECOMENDAÇÃO DIÁRIA.',
-    usageInstructions: 'Ingerir 2 cápsulas ao dia.',
+    status: 'ACTIVE' as Product['status'],
+    complianceStatus: 'DRAFT' as ComplianceState,
+    regulatoryInfo:
+      'Suplemento Alimentar notificado conforme exigência ANVISA vigente e IN 28/2018.',
+    warnings:
+      'ESTE PRODUTO NÃO É UM MEDICAMENTO. NÃO EXCEDER A RECOMENDAÇÃO DIÁRIA DE CONSUMO INDICADA NA EMBALAGEM. MANTENHA FORA DO ALCANCE DE CRIANÇAS.',
+    usageInstructions: 'Ingerir 2 (duas) cápsulas ao dia ou conforme orientação profissional.',
+    restrictions: 'Uso adulto (>= 19 anos). Não deve ser consumido por gestantes, lactantes e crianças.',
+    labelingInfo: 'Rotulagem nutricional padrão ANVISA RDC 429/2020 e IN 75/2020. Não contém glúten.',
+    documents: [] as ProductDocument[],
+    approvedClaims: [] as ProductClaim[],
   });
+
+  const [prodForm, setProdForm] = useState(getInitialProductForm);
+
+  const openCreateProductModal = () => {
+    setEditingProduct(null);
+    setProdForm(getInitialProductForm());
+    setProductModalOpen(true);
+  };
+
+  const openEditProductModal = (prod: Product) => {
+    setEditingProduct(prod);
+    setProdForm({
+      sku: prod.sku,
+      internalName: prod.internalName,
+      commercialName: prod.commercialName,
+      category: prod.category,
+      description: prod.description,
+      composition: prod.composition,
+      presentation: prod.presentation,
+      unitQuantity: prod.unitQuantity,
+      batchNumber: prod.batchNumber,
+      expiryDate: prod.expiryDate,
+      unitCost: prod.unitCost,
+      stockQuantity: prod.stockQuantity,
+      status: prod.status,
+      complianceStatus: prod.complianceStatus,
+      regulatoryInfo: prod.regulatoryInfo,
+      warnings: prod.warnings,
+      usageInstructions: prod.usageInstructions,
+      restrictions: prod.restrictions,
+      labelingInfo: prod.labelingInfo,
+      documents: [...(prod.documents || [])],
+      approvedClaims: [...(prod.approvedClaims || [])],
+    });
+    setProductModalOpen(true);
+  };
+
+  const openProductDetail = (
+    prod: Product,
+    initialTab: 'GERAL' | 'ROTULO' | 'DOCUMENTOS' = 'GERAL'
+  ) => {
+    setSelectedProductId(prod.id);
+    setProductDetailTab(initialTab);
+    setQuickStockValue(prod.stockQuantity);
+    setQuickCostValue(prod.unitCost);
+  };
+
+  const activeSelectedProduct = products.find((p) => p.id === selectedProductId) || null;
 
   // Offer Engine Modal
   const [offerModalOpen, setOfferModalOpen] = useState(false);
@@ -269,12 +365,16 @@ export const AdminWorkspace: React.FC<{
     } else {
       onNotify(
         editingProduct
-          ? `Produto ${data.product.sku} atualizado!`
-          : `Produto ${data.product.sku} cadastrado com sucesso!`,
+          ? `Produto ${data.product.sku} atualizado com sucesso!`
+          : `Produto ${data.product.sku} cadastrado no catálogo!`,
         'success'
       );
       setProductModalOpen(false);
       setEditingProduct(null);
+      if (selectedProductId === data.product.id) {
+        setQuickStockValue(data.product.stockQuantity);
+        setQuickCostValue(data.product.unitCost);
+      }
       onRefresh();
     }
   };
@@ -301,7 +401,107 @@ export const AdminWorkspace: React.FC<{
       body: JSON.stringify({ status: nextStatus }),
     });
     if (res.ok) {
-      onNotify(`Status do produto ${prod.sku} alterado para ${nextStatus}.`, 'info');
+      onNotify(
+        `Produto ${prod.sku} ${nextStatus === 'ACTIVE' ? 'ativado' : 'desativado'}.`,
+        'info'
+      );
+      onRefresh();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      onNotify(data.error || 'Erro ao atualizar status do produto.', 'error');
+    }
+  };
+
+  const handleUpdateProductQuickFields = async (
+    prodId: string,
+    patch: Partial<Product>,
+    successMsg: string
+  ) => {
+    const res = await fetch(`/api/products/${prodId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(patch),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      onNotify(data.error || 'Não foi possível atualizar o produto.', 'error');
+    } else {
+      onNotify(successMsg, 'success');
+      onRefresh();
+    }
+  };
+
+  const handleAddProductDocument = async (e: React.FormEvent, prod: Product) => {
+    e.preventDefault();
+    if (!newDocForm.title.trim()) {
+      onNotify('Informe o título do documento ou laudo técnico.', 'error');
+      return;
+    }
+    const res = await fetch(`/api/products/${prod.id}/documents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        title: newDocForm.title.trim(),
+        docType: newDocForm.docType,
+        version: newDocForm.version.trim() || 'v1.0',
+        status: 'VALID',
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      onNotify(data.error || 'Erro ao anexar documento.', 'error');
+    } else {
+      onNotify(`Documento "${data.document.title}" anexado ao produto ${prod.sku}!`, 'success');
+      setNewDocForm({ title: '', docType: 'LAUDO_TECNICO', version: 'v1.0' });
+      onRefresh();
+    }
+  };
+
+  const handleRemoveProductDocument = async (prodId: string, docId: string) => {
+    const res = await fetch(`/api/products/${prodId}/documents/${docId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      onNotify('Documento removido do produto.', 'info');
+      onRefresh();
+    } else {
+      onNotify('Não foi possível remover o documento.', 'error');
+    }
+  };
+
+  const handleAddProductClaim = async (e: React.FormEvent, prod: Product) => {
+    e.preventDefault();
+    if (!newClaimForm.claimText.trim()) {
+      onNotify('Informe o texto da alegação funcional autorizada.', 'error');
+      return;
+    }
+    const res = await fetch(`/api/products/${prod.id}/claims`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        claimText: newClaimForm.claimText.trim(),
+        regulatoryBasis: newClaimForm.regulatoryBasis.trim() || 'IN ANVISA nº 28/2018 - Anexo V',
+        status: 'APPROVED',
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      onNotify(data.error || 'Erro ao adicionar alegação.', 'error');
+    } else {
+      onNotify('Alegação funcional adicionada ao produto!', 'success');
+      setNewClaimForm({ claimText: '', regulatoryBasis: 'IN ANVISA nº 28/2018 - Anexo V' });
+      onRefresh();
+    }
+  };
+
+  const handleRemoveProductClaim = async (prodId: string, claimId: string) => {
+    const res = await fetch(`/api/products/${prodId}/claims/${claimId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      onNotify('Alegação removida do produto.', 'info');
       onRefresh();
     }
   };
@@ -758,21 +958,22 @@ export const AdminWorkspace: React.FC<{
       )}
 
       {/* ==================================================================== */}
-      {/* 2. PRODUTOS — Produtos + Combos + Documentação/Compliance no mesmo lugar */}
+      {/* 2. PRODUTOS — Catálogo Operacional Enxuto + Detalhes em Drawer       */}
       {/* ==================================================================== */}
       {activeArea === 'PRODUTOS' && (
         <div className="space-y-6">
+          {/* Cabeçalho Principal Enxuto */}
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h1 className="text-xl font-extrabold font-display text-[var(--text-primary)]">
-                Produtos, Combos & Conformidade
+              <h1 className="text-xl font-extrabold font-display text-[var(--text-primary)] tracking-tight">
+                Produtos
               </h1>
               <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                Gerencie os itens físicos em estoque, kits/combos e documentação regulatória de cada produto.
+                Gerencie seu catálogo, estoque e informações regulatórias dos produtos.
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2.5">
               <div className="flex items-center bg-[var(--bg-subtle)] p-1 rounded-xl border border-[var(--border-subtle)]">
                 <button
                   onClick={() => setProductTab('CATALOGO')}
@@ -782,7 +983,7 @@ export const AdminWorkspace: React.FC<{
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
-                  Produtos ({products.length})
+                  Catálogo ({products.length})
                 </button>
                 <button
                   onClick={() => setProductTab('COMBOS')}
@@ -792,7 +993,7 @@ export const AdminWorkspace: React.FC<{
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
-                  Kits & Combos
+                  Kits & Combos ({offers.filter((o) => o.offerType !== '1_UNIT').length})
                 </button>
                 <button
                   onClick={() => setProductTab('COMPLIANCE')}
@@ -802,276 +1003,551 @@ export const AdminWorkspace: React.FC<{
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
-                  Aprovação & Rótulos ({complianceReviews.length})
+                  Conformidade & Rótulos ({complianceReviews.length})
                 </button>
               </div>
 
               <Button
                 size="sm"
                 icon={<Plus className="w-4 h-4" />}
-                onClick={() => {
-                  setEditingProduct(null);
-                  setProductModalOpen(true);
-                }}
+                onClick={openCreateProductModal}
               >
-                Novo Produto
+                Novo produto
               </Button>
             </div>
           </div>
 
-          {productTab === 'CATALOGO' && (
-            <div className="space-y-4">
-              <SearchBar
-                value={searchQuery}
-                onChange={setSearchQuery}
-                placeholder="Buscar produto por nome, SKU ou categoria..."
-              />
+          {productTab === 'CATALOGO' &&
+            (() => {
+              const activeProductsCount = products.filter((p) => p.status === 'ACTIVE').length;
+              const totalStockUnits = products.reduce((acc, p) => acc + p.stockQuantity, 0);
+              const lowStockCount = products.filter((p) => p.stockQuantity < 150).length;
+              const pendingDocsOrComplianceCount = products.filter(
+                (p) => p.complianceStatus !== 'APPROVED' || p.documents.length === 0
+              ).length;
 
-              <div className="grid grid-cols-1 gap-4">
-                {products
-                  .filter(
-                    (p) =>
-                      p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      p.commercialName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      p.category.toLowerCase().includes(searchQuery.toLowerCase())
-                  )
-                  .map((prod) => (
-                    <Card key={prod.id}>
-                      <div className="flex flex-col lg:flex-row justify-between gap-6">
-                        <div className="flex gap-4">
-                          <img
-                            src={
-                              prod.images[0]?.url ||
-                              '/src/assets/images/product_lipotherm_pro_1790723418728.jpg'
-                            }
-                            alt={prod.commercialName}
-                            referrerPolicy="no-referrer"
-                            className="w-24 h-24 rounded-xl object-cover border border-[var(--border-subtle)] shrink-0"
-                          />
-                          <div className="space-y-1.5">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge tone="lime">SKU: {prod.sku}</Badge>
-                              <Badge tone="cyan">{prod.category}</Badge>
-                              <StatusBadge status={prod.status} />
-                            </div>
-                            <h3 className="text-base font-bold text-[var(--text-primary)]">
-                              {prod.commercialName}
-                            </h3>
-                            <p className="text-xs text-[var(--text-secondary)]">{prod.description}</p>
-                            <div className="flex flex-wrap gap-4 pt-1 text-xs font-mono text-[var(--text-secondary)]">
-                              <span>Apresentação: {prod.presentation}</span>
-                              <span>Lote: {prod.batchNumber}</span>
-                              <span>Validade: {prod.expiryDate}</span>
-                              <span className="font-semibold text-indigo-600 dark:text-indigo-400">
-                                Custo: R$ {prod.unitCost.toFixed(2)}
-                              </span>
-                              <span>Estoque: {prod.stockQuantity} un</span>
-                            </div>
-                          </div>
-                        </div>
+              const filteredProducts = products.filter((p) => {
+                const q = searchQuery.trim().toLowerCase();
+                const matchesQuery =
+                  !q ||
+                  p.sku.toLowerCase().includes(q) ||
+                  p.commercialName.toLowerCase().includes(q) ||
+                  p.internalName.toLowerCase().includes(q) ||
+                  p.category.toLowerCase().includes(q) ||
+                  p.batchNumber.toLowerCase().includes(q);
 
-                        <div className="flex lg:flex-col justify-between items-end gap-2 shrink-0">
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              size="xs"
-                              variant="secondary"
-                              onClick={() => {
-                                setEditingProduct(prod);
-                                setProdForm({
-                                  sku: prod.sku,
-                                  internalName: prod.internalName,
-                                  commercialName: prod.commercialName,
-                                  category: prod.category,
-                                  description: prod.description,
-                                  composition: prod.composition,
-                                  presentation: prod.presentation,
-                                  unitQuantity: prod.unitQuantity,
-                                  batchNumber: prod.batchNumber,
-                                  expiryDate: prod.expiryDate,
-                                  unitCost: prod.unitCost,
-                                  stockQuantity: prod.stockQuantity,
-                                  regulatoryInfo: prod.regulatoryInfo,
-                                  warnings: prod.warnings,
-                                  usageInstructions: prod.usageInstructions,
-                                });
-                                setProductModalOpen(true);
-                              }}
-                            >
-                              Editar Produto / Docs
-                            </Button>
-                            <Button
-                              size="xs"
-                              variant="secondary"
-                              icon={<Copy className="w-3.5 h-3.5" />}
-                              onClick={() => handleDuplicateProduct(prod.id)}
-                            >
-                              Duplicar
-                            </Button>
-                            <Button
-                              size="xs"
-                              variant={prod.status === 'ACTIVE' ? 'danger' : 'primary'}
-                              onClick={() => handleToggleProductStatus(prod)}
-                            >
-                              {prod.status === 'ACTIVE' ? 'Desativar' : 'Ativar'}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
+                const matchesCategory =
+                  productCategoryFilter === 'ALL' || p.category === productCategoryFilter;
 
-                      {/* Documentação e Claims contextualizados diretamente no Produto */}
-                      <div className="mt-4 pt-4 border-t border-[var(--border-subtle)] grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                        <div className="bg-[var(--bg-subtle)]/50 p-3.5 rounded-xl border border-[var(--border-subtle)]">
-                          <div className="font-bold text-[var(--text-primary)] mb-1.5">
-                            Alegações Autorizadas no Rótulo & Modo de Uso
-                          </div>
-                          {prod.approvedClaims.map((c) => (
-                            <div key={c.id} className="text-[var(--text-secondary)] mb-1">
-                              • {c.claimText}
-                            </div>
-                          ))}
-                          <div className="text-[11px] text-[var(--text-muted)] mt-2">
-                            <strong>Uso recomendado:</strong> {prod.usageInstructions}
-                          </div>
-                        </div>
+                const matchesStatus =
+                  productStatusFilter === 'ALL' || p.status === productStatusFilter;
 
-                        <div className="bg-[var(--bg-subtle)]/50 p-3.5 rounded-xl border border-[var(--border-subtle)]">
-                          <div className="font-bold text-[var(--text-primary)] mb-1.5">
-                            Documentação & Laudos Anexados ({prod.documents.length})
-                          </div>
-                          {prod.documents.length === 0 ? (
-                            <p className="text-amber-600 dark:text-amber-400">
-                              Nenhum documento anexado ainda. Clique em "Editar Produto / Docs" para anexar.
-                            </p>
-                          ) : (
-                            prod.documents.map((doc) => (
-                              <div
-                                key={doc.id}
-                                className="flex items-center justify-between py-1.5 border-b border-[var(--border-subtle)] last:border-0"
-                              >
-                                <span className="text-[var(--text-secondary)]">{doc.title}</span>
-                                <Badge tone="emerald">{doc.version}</Badge>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-              </div>
-            </div>
-          )}
+                const matchesCompliance =
+                  productComplianceFilter === 'ALL' ||
+                  (productComplianceFilter === 'APPROVED' &&
+                    p.complianceStatus === 'APPROVED' &&
+                    p.documents.length > 0) ||
+                  (productComplianceFilter === 'PENDING_REVIEW' &&
+                    p.complianceStatus !== 'APPROVED') ||
+                  (productComplianceFilter === 'MISSING_DOCS' && p.documents.length === 0);
 
-          {productTab === 'COMBOS' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {offers
-                .filter((o) => o.offerType !== '1_UNIT')
-                .map((off) => (
-                  <Card
-                    key={off.id}
-                    title={off.name}
-                    subtitle={`Código: /o/${off.code} · Tipo: ${off.offerType}`}
-                    action={<StatusBadge status={off.status} />}
-                  >
-                    <div className="space-y-3 text-xs">
-                      <div className="bg-[var(--bg-subtle)]/60 p-3 rounded-xl border border-[var(--border-subtle)] flex justify-between items-center">
-                        <div>
-                          <span className="text-[var(--text-muted)] block">Composição do Kit/Combo:</span>
-                          <strong className="text-[var(--text-primary)]">
-                            {off.items.map((i) => `${i.quantity}x ${i.productName}`).join(' + ')}
-                          </strong>
-                        </div>
-                        <div className="text-right font-mono">
-                          <span className="line-through text-[var(--text-muted)] block">
-                            R$ {off.regularPrice.toFixed(2)}
-                          </span>
-                          <strong className="text-base text-indigo-600 dark:text-indigo-400">
-                            R$ {off.promotionalPrice.toFixed(2)}
-                          </strong>
-                        </div>
-                      </div>
-                      <div className="flex justify-end gap-2">
+                return matchesQuery && matchesCategory && matchesStatus && matchesCompliance;
+              });
+
+              return (
+                <div className="space-y-5">
+                  {/* Resumo Operacional Sóbrio do Catálogo */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <KPI
+                      label="Produtos no Catálogo"
+                      value={formatIntegerBR(products.length)}
+                      subvalue={`${activeProductsCount} ativos · ${
+                        products.length - activeProductsCount
+                      } inativos`}
+                      icon={<Package className="w-4 h-4" />}
+                    />
+                    <KPI
+                      label="Estoque Físico Total"
+                      value={`${formatIntegerBR(totalStockUnits)} un`}
+                      subvalue={
+                        lowStockCount > 0
+                          ? `${lowStockCount} com estoque de atenção`
+                          : 'Abastecimento regular'
+                      }
+                      icon={<PackageCheck className="w-4 h-4" />}
+                    />
+                    <KPI
+                      label="Kits & Ofertas Vinculadas"
+                      value={formatIntegerBR(offers.filter((o) => o.status === 'ACTIVE').length)}
+                      subvalue={`${
+                        offers.filter((o) => o.offerType !== '1_UNIT').length
+                      } kits multi-frascos configurados`}
+                      icon={<Layers className="w-4 h-4" />}
+                    />
+                    <KPI
+                      label="Pendências Regulatórias"
+                      value={formatIntegerBR(pendingDocsOrComplianceCount)}
+                      subvalue={
+                        pendingDocsOrComplianceCount > 0
+                          ? 'Produtos sem dossiê ou revisão aprovada'
+                          : '100% do catálogo em conformidade'
+                      }
+                      accent={pendingDocsOrComplianceCount > 0 ? 'danger' : 'lime'}
+                      icon={<ShieldCheck className="w-4 h-4" />}
+                    />
+                  </div>
+
+                  {/* Barra de Busca + Filtros Rápidos */}
+                  <div className="modern-card rounded-2xl p-4 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+                    <div className="flex-1">
+                      <SearchBar
+                        value={searchQuery}
+                        onChange={setSearchQuery}
+                        placeholder="Buscar por nome comercial, SKU, categoria ou lote..."
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        value={productCategoryFilter}
+                        onChange={(e) => setProductCategoryFilter(e.target.value)}
+                        aria-label="Filtrar por categoria"
+                        className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="ALL">Todas as categorias</option>
+                        {PRODUCT_CATEGORIES.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+
+                      <select
+                        value={productStatusFilter}
+                        onChange={(e) =>
+                          setProductStatusFilter(
+                            e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED'
+                          )
+                        }
+                        aria-label="Filtrar por status"
+                        className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="ALL">Todos os status</option>
+                        <option value="ACTIVE">Somente ativos</option>
+                        <option value="INACTIVE">Somente inativos</option>
+                      </select>
+
+                      <select
+                        value={productComplianceFilter}
+                        onChange={(e) =>
+                          setProductComplianceFilter(
+                            e.target.value as
+                              | 'ALL'
+                              | 'APPROVED'
+                              | 'PENDING_REVIEW'
+                              | 'MISSING_DOCS'
+                          )
+                        }
+                        aria-label="Filtrar por conformidade"
+                        className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="ALL">Qualquer conformidade</option>
+                        <option value="APPROVED">Conformidade aprovada</option>
+                        <option value="PENDING_REVIEW">Revisão pendente</option>
+                        <option value="MISSING_DOCS">Sem documentos anexados</option>
+                      </select>
+
+                      {(searchQuery ||
+                        productCategoryFilter !== 'ALL' ||
+                        productStatusFilter !== 'ALL' ||
+                        productComplianceFilter !== 'ALL') && (
                         <Button
                           size="xs"
-                          variant="secondary"
-                          onClick={() => onOpenPublicLink(off.code)}
+                          variant="ghost"
+                          onClick={() => {
+                            setSearchQuery('');
+                            setProductCategoryFilter('ALL');
+                            setProductStatusFilter('ALL');
+                            setProductComplianceFilter('ALL');
+                          }}
                         >
-                          Ver no Checkout (/o/{off.code})
+                          Limpar filtros
                         </Button>
-                      </div>
+                      )}
                     </div>
+                  </div>
+
+                  {/* Tabela Operacional de Catálogo (Enxuta e Escaneável) */}
+                  <Card className="!p-0 overflow-hidden">
+                    {filteredProducts.length === 0 ? (
+                      <div className="p-6">
+                        <EmptyState
+                          title="Nenhum produto encontrado"
+                          description="Ajuste os filtros de busca ou cadastre um novo produto no catálogo."
+                          action={
+                            <Button
+                              size="sm"
+                              icon={<Plus className="w-4 h-4" />}
+                              onClick={openCreateProductModal}
+                            >
+                              Novo produto
+                            </Button>
+                          }
+                        />
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-subtle)]/60 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                              <th className="py-3.5 px-5">Produto</th>
+                              <th className="py-3.5 px-4">Categoria & Apresentação</th>
+                              <th className="py-3.5 px-4">Lote & Validade</th>
+                              <th className="py-3.5 px-4 text-right">Custo Unit.</th>
+                              <th className="py-3.5 px-4 text-right">Estoque</th>
+                              <th className="py-3.5 px-4">Conformidade</th>
+                              <th className="py-3.5 px-4">Status</th>
+                              <th className="py-3.5 px-5 text-right">Ações</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[var(--border-subtle)]">
+                            {filteredProducts.map((prod) => {
+                              const validDocsCount = (prod.documents || []).filter(
+                                (d) => d.status === 'VALID'
+                              ).length;
+                              const totalDocsCount = (prod.documents || []).length;
+                              const isLowStock = prod.stockQuantity < 150;
+                              const isOutOfStock = prod.stockQuantity <= 0;
+
+                              return (
+                                <tr
+                                  key={prod.id}
+                                  onClick={() => openProductDetail(prod, 'GERAL')}
+                                  className="hover:bg-[var(--bg-subtle)]/70 transition-colors cursor-pointer group"
+                                >
+                                  {/* 1. Produto (Imagem, Nome Comercial, SKU) */}
+                                  <td className="py-4 px-5">
+                                    <div className="flex items-center gap-3.5">
+                                      <img
+                                        src={
+                                          prod.images[0]?.url ||
+                                          '/src/assets/images/product_lipotherm_pro_1790723418728.jpg'
+                                        }
+                                        alt={prod.commercialName}
+                                        referrerPolicy="no-referrer"
+                                        className="w-12 h-12 rounded-xl object-cover border border-[var(--border-subtle)] shrink-0 bg-[var(--bg-subtle)]"
+                                      />
+                                      <div className="min-w-0">
+                                        <div className="font-bold text-sm text-[var(--text-primary)] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate max-w-[240px]">
+                                          {prod.commercialName}
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                          <span className="font-mono text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">
+                                            {prod.sku}
+                                          </span>
+                                          <span className="text-[var(--text-muted)]">·</span>
+                                          <span className="text-[11px] text-[var(--text-muted)] truncate max-w-[160px]">
+                                            {prod.internalName}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  {/* 2. Categoria & Apresentação */}
+                                  <td className="py-4 px-4">
+                                    <Badge tone="slate">{prod.category}</Badge>
+                                    <div className="text-[11px] text-[var(--text-secondary)] mt-1">
+                                      {prod.presentation}
+                                    </div>
+                                  </td>
+
+                                  {/* 3. Lote & Validade */}
+                                  <td className="py-4 px-4">
+                                    <div className="font-mono font-semibold text-[var(--text-primary)]">
+                                      {prod.batchNumber}
+                                    </div>
+                                    <div className="text-[11px] text-[var(--text-muted)] mt-0.5 tabular-nums">
+                                      Val: {formatDateBR(prod.expiryDate)}
+                                    </div>
+                                  </td>
+
+                                  {/* 4. Custo Unitário */}
+                                  <td className="py-4 px-4 text-right font-mono font-semibold text-[var(--text-primary)] tabular-nums">
+                                    {formatCurrencyBRL(prod.unitCost)}
+                                  </td>
+
+                                  {/* 5. Estoque */}
+                                  <td className="py-4 px-4 text-right">
+                                    <div
+                                      className={`font-mono font-bold tabular-nums ${
+                                        isOutOfStock
+                                          ? 'text-rose-600 dark:text-rose-400'
+                                          : isLowStock
+                                          ? 'text-amber-600 dark:text-amber-400'
+                                          : 'text-[var(--text-primary)]'
+                                      }`}
+                                    >
+                                      {formatIntegerBR(prod.stockQuantity)} un
+                                    </div>
+                                    <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                                      {isOutOfStock
+                                        ? 'Sem estoque'
+                                        : isLowStock
+                                        ? 'Estoque baixo'
+                                        : 'Em estoque'}
+                                    </div>
+                                  </td>
+
+                                  {/* 6. Conformidade & Dossiê */}
+                                  <td className="py-4 px-4">
+                                    <div className="flex items-center gap-1.5">
+                                      <StatusBadge status={prod.complianceStatus} />
+                                    </div>
+                                    <div
+                                      className={`text-[11px] mt-1 ${
+                                        totalDocsCount === 0
+                                          ? 'text-amber-600 dark:text-amber-400 font-medium'
+                                          : 'text-[var(--text-muted)]'
+                                      }`}
+                                    >
+                                      {totalDocsCount === 0
+                                        ? 'Sem laudos anexados'
+                                        : `${validDocsCount}/${totalDocsCount} doc(s) válidos`}
+                                    </div>
+                                  </td>
+
+                                  {/* 7. Status do Produto */}
+                                  <td className="py-4 px-4">
+                                    <StatusBadge status={prod.status} />
+                                  </td>
+
+                                  {/* 8. Ações Rápidas */}
+                                  <td
+                                    className="py-4 px-5 text-right"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <div className="inline-flex items-center justify-end gap-1.5">
+                                      <Button
+                                        size="xs"
+                                        variant="secondary"
+                                        icon={<Eye className="w-3.5 h-3.5" />}
+                                        onClick={() => openProductDetail(prod, 'GERAL')}
+                                      >
+                                        Detalhes
+                                      </Button>
+                                      <Button
+                                        size="xs"
+                                        variant="ghost"
+                                        title="Editar cadastro do produto"
+                                        onClick={() => openEditProductModal(prod)}
+                                      >
+                                        <Edit3 className="w-3.5 h-3.5" />
+                                      </Button>
+                                      <Button
+                                        size="xs"
+                                        variant="ghost"
+                                        title="Duplicar produto"
+                                        onClick={() => handleDuplicateProduct(prod.id)}
+                                      >
+                                        <Copy className="w-3.5 h-3.5" />
+                                      </Button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </Card>
-                ))}
+                </div>
+              );
+            })()}
+
+          {productTab === 'COMBOS' && (
+            <div className="space-y-4">
+              <div className="modern-card rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 bg-[var(--bg-subtle)]/40">
+                <div>
+                  <h3 className="text-sm font-bold text-[var(--text-primary)]">
+                    Kits & Combos Comerciais Baseados no Catálogo
+                  </h3>
+                  <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                    Cada kit consome automaticamente a quantidade correspondente de frascos do estoque físico do produto vinculado.
+                  </p>
+                </div>
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  icon={<Plus className="w-3.5 h-3.5" />}
+                  onClick={() => setOfferModalOpen(true)}
+                >
+                  Novo Kit / Oferta
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {offers
+                  .filter((o) => o.offerType !== '1_UNIT')
+                  .map((off) => {
+                    const offerTypeLabels: Record<string, string> = {
+                      '1_UNIT': '1 Unidade',
+                      KIT_2: 'Kit 2 Unidades',
+                      KIT_3_PLUS: 'Kit 3+ Unidades',
+                      COMBO: 'Combo Multi-Produto',
+                    };
+                    const totalCost = off.items.reduce(
+                      (acc, item) => acc + item.unitCost * item.quantity,
+                      0
+                    );
+                    return (
+                      <Card
+                        key={off.id}
+                        title={off.name}
+                        subtitle={`Link: /o/${off.code} · ${
+                          offerTypeLabels[off.offerType] || off.offerType
+                        }`}
+                        action={<StatusBadge status={off.status} />}
+                      >
+                        <div className="space-y-3 text-xs">
+                          <div className="bg-[var(--bg-subtle)]/60 p-3.5 rounded-xl border border-[var(--border-subtle)] flex justify-between items-center gap-4">
+                            <div>
+                              <span className="text-[var(--text-muted)] block text-[11px]">
+                                Composição física do kit:
+                              </span>
+                              <strong className="text-[var(--text-primary)] text-sm">
+                                {off.items
+                                  .map((i) => `${i.quantity}x ${i.productName}`)
+                                  .join(' + ')}
+                              </strong>
+                              <span className="text-[11px] text-[var(--text-muted)] block mt-1 font-mono">
+                                Custo físico total: {formatCurrencyBRL(totalCost)}
+                              </span>
+                            </div>
+                            <div className="text-right font-mono shrink-0">
+                              <span className="line-through text-[var(--text-muted)] block text-[11px] tabular-nums">
+                                {formatCurrencyBRL(off.regularPrice)}
+                              </span>
+                              <strong className="text-base text-indigo-600 dark:text-indigo-400 tabular-nums">
+                                {formatCurrencyBRL(off.promotionalPrice)}
+                              </strong>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between pt-1">
+                            <span className="text-[11px] text-[var(--text-muted)]">
+                              Usos: {formatIntegerBR(off.usageCount)} /{' '}
+                              {formatIntegerBR(off.usageLimit)}
+                            </span>
+                            <Button
+                              size="xs"
+                              variant="secondary"
+                              icon={<ExternalLink className="w-3.5 h-3.5" />}
+                              onClick={() => onOpenPublicLink(off.code)}
+                            >
+                              Abrir Checkout (/o/{off.code})
+                            </Button>
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })}
+              </div>
             </div>
           )}
 
           {productTab === 'COMPLIANCE' && (
             <Card
-              title="Checklist de Conformidade & Rotulagem dos Produtos"
-              subtitle="Validação rápida de documentação, rótulo e comunicação antes de liberar ofertas ao público"
+              title="Checklist de Conformidade & Rotulagem (ANVISA / IN 28)"
+              subtitle="Validação regulatória de documentação, alegações funcionais e rotulagem antes de liberar produtos e ofertas"
             >
               <div className="space-y-4">
-                {complianceReviews.map((rev) => (
-                  <div
-                    key={rev.id}
-                    className="bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] rounded-xl p-4 space-y-3"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <Badge tone="cyan">{rev.targetType}</Badge>
-                          <h4 className="text-sm font-bold text-[var(--text-primary)]">
-                            {rev.targetName}
-                          </h4>
+                {complianceReviews.map((rev) => {
+                  const targetTypeLabel =
+                    rev.targetType === 'PRODUTO'
+                      ? 'Produto'
+                      : rev.targetType === 'OFERTA'
+                      ? 'Oferta'
+                      : 'Campanha';
+                  const linkedProd =
+                    rev.targetType === 'PRODUTO'
+                      ? products.find((p) => p.id === rev.targetId)
+                      : undefined;
+
+                  return (
+                    <div
+                      key={rev.id}
+                      className="bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] rounded-xl p-4 space-y-3"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <Badge tone="cyan">{targetTypeLabel}</Badge>
+                            <h4 className="text-sm font-bold text-[var(--text-primary)]">
+                              {rev.targetName}
+                            </h4>
+                          </div>
+                          <p className="text-xs text-[var(--text-secondary)] mt-1">{rev.notes}</p>
                         </div>
-                        <p className="text-xs text-[var(--text-secondary)] mt-1">{rev.notes}</p>
+                        <div className="flex items-center gap-2">
+                          {linkedProd && (
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              onClick={() => openProductDetail(linkedProd, 'DOCUMENTOS')}
+                            >
+                              Ver dossiê do produto
+                            </Button>
+                          )}
+                          <StatusBadge status={rev.status} />
+                        </div>
                       </div>
-                      <StatusBadge status={rev.status} />
-                    </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 bg-[var(--bg-surface)] p-3 rounded-xl border border-[var(--border-subtle)] text-xs">
-                      {(
-                        [
-                          ['documentacaoExistente', '1. Documentação'],
-                          ['statusRegulatorio', '2. Status ANVISA'],
-                          ['claimsAprovados', '3. Claims IN 28'],
-                          ['rotulagem', '4. Rotulagem'],
-                          ['comunicacaoComercial', '5. Copy Comercial'],
-                          ['advertenciasObrigatorias', '6. Advertências'],
-                        ] as const
-                      ).map(([key, label]) => (
-                        <label
-                          key={key}
-                          className="flex items-center gap-2 cursor-pointer text-[var(--text-primary)]"
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 bg-[var(--bg-surface)] p-3 rounded-xl border border-[var(--border-subtle)] text-xs">
+                        {(
+                          [
+                            ['documentacaoExistente', '1. Documentação'],
+                            ['statusRegulatorio', '2. Status ANVISA'],
+                            ['claimsAprovados', '3. Claims IN 28'],
+                            ['rotulagem', '4. Rotulagem'],
+                            ['comunicacaoComercial', '5. Copy Comercial'],
+                            ['advertenciasObrigatorias', '6. Advertências'],
+                          ] as const
+                        ).map(([key, label]) => (
+                          <label
+                            key={key}
+                            className="flex items-center gap-2 cursor-pointer text-[var(--text-primary)]"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={rev.checklist[key]}
+                              onChange={() => handleUpdateCompliance(rev, undefined, key)}
+                              className="accent-indigo-600"
+                            />
+                            <span>{label}</span>
+                          </label>
+                        ))}
+                      </div>
+
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          size="xs"
+                          variant="primary"
+                          onClick={() => handleUpdateCompliance(rev, 'APPROVED')}
                         >
-                          <input
-                            type="checkbox"
-                            checked={rev.checklist[key]}
-                            onChange={() => handleUpdateCompliance(rev, undefined, key)}
-                            className="accent-indigo-600"
-                          />
-                          <span>{label}</span>
-                        </label>
-                      ))}
+                          Aprovar Conformidade
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="danger"
+                          onClick={() => handleUpdateCompliance(rev, 'REJECTED')}
+                        >
+                          Rejeitar
+                        </Button>
+                      </div>
                     </div>
-
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        size="xs"
-                        variant="primary"
-                        onClick={() => handleUpdateCompliance(rev, 'APPROVED')}
-                      >
-                        Aprovar Conformidade
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="danger"
-                        onClick={() => handleUpdateCompliance(rev, 'REJECTED')}
-                      >
-                        Rejeitar
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </Card>
           )}
@@ -2115,84 +2591,761 @@ export const AdminWorkspace: React.FC<{
       )}
 
       {/* ==================================================================== */}
-      {/* MODALS REAPROVEITADOS: PRODUTO, OFERTA E CUPOM */}
+      {/* DRAWER DE DETALHES COMPLETOS DO PRODUTO                              */}
+      {/* ==================================================================== */}
+      <Drawer
+        open={Boolean(activeSelectedProduct)}
+        onClose={() => setSelectedProductId(null)}
+        title={activeSelectedProduct ? activeSelectedProduct.commercialName : 'Detalhes do Produto'}
+        subtitle={
+          activeSelectedProduct
+            ? `SKU: ${activeSelectedProduct.sku} · ${activeSelectedProduct.category} · ${activeSelectedProduct.presentation}`
+            : undefined
+        }
+        maxWidth="max-w-3xl"
+        headerActions={
+          activeSelectedProduct && (
+            <>
+              <Button
+                size="xs"
+                variant="secondary"
+                icon={<Edit3 className="w-3.5 h-3.5" />}
+                onClick={() => openEditProductModal(activeSelectedProduct)}
+              >
+                Editar cadastro
+              </Button>
+              <Button
+                size="xs"
+                variant="secondary"
+                icon={<Copy className="w-3.5 h-3.5" />}
+                onClick={() => handleDuplicateProduct(activeSelectedProduct.id)}
+              >
+                Duplicar
+              </Button>
+              <Button
+                size="xs"
+                variant={activeSelectedProduct.status === 'ACTIVE' ? 'danger' : 'primary'}
+                onClick={() => handleToggleProductStatus(activeSelectedProduct)}
+              >
+                {activeSelectedProduct.status === 'ACTIVE' ? 'Desativar' : 'Ativar'}
+              </Button>
+            </>
+          )
+        }
+      >
+        {activeSelectedProduct && (
+          <div className="space-y-6">
+            {/* Resumo superior do produto */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-2xl bg-[var(--bg-subtle)]/60 border border-[var(--border-subtle)]">
+              <div className="flex items-center gap-4">
+                <img
+                  src={
+                    activeSelectedProduct.images[0]?.url ||
+                    '/src/assets/images/product_lipotherm_pro_1790723418728.jpg'
+                  }
+                  alt={activeSelectedProduct.commercialName}
+                  referrerPolicy="no-referrer"
+                  className="w-16 h-16 rounded-xl object-cover border border-[var(--border-subtle)] shrink-0"
+                />
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={activeSelectedProduct.status} />
+                    <StatusBadge status={activeSelectedProduct.complianceStatus} />
+                    <Badge tone="slate">{activeSelectedProduct.category}</Badge>
+                  </div>
+                  <p className="text-xs text-[var(--text-secondary)] mt-1.5 leading-relaxed">
+                    {activeSelectedProduct.description || 'Sem descrição comercial informada.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Sub-abas do Drawer de Detalhes do Produto */}
+            <div className="flex items-center bg-[var(--bg-subtle)] p-1 rounded-xl border border-[var(--border-subtle)]">
+              <button
+                onClick={() => setProductDetailTab('GERAL')}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                  productDetailTab === 'GERAL'
+                    ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                Visão Geral & Estoque
+              </button>
+              <button
+                onClick={() => setProductDetailTab('ROTULO')}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                  productDetailTab === 'ROTULO'
+                    ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                Composição, Rótulo & Claims ({activeSelectedProduct.approvedClaims.length})
+              </button>
+              <button
+                onClick={() => setProductDetailTab('DOCUMENTOS')}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                  productDetailTab === 'DOCUMENTOS'
+                    ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                Documentos & Conformidade ({activeSelectedProduct.documents.length})
+              </button>
+            </div>
+
+            {/* ABA 1: VISÃO GERAL, LOTES, ESTOQUE E OFERTAS VINCULADAS */}
+            {productDetailTab === 'GERAL' && (
+              <div className="space-y-5">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="p-3.5 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)]">
+                    <span className="text-[var(--text-muted)] block text-[11px]">SKU</span>
+                    <strong className="font-mono text-sm text-[var(--text-primary)] mt-0.5 block">
+                      {activeSelectedProduct.sku}
+                    </strong>
+                  </div>
+                  <div className="p-3.5 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)]">
+                    <span className="text-[var(--text-muted)] block text-[11px]">Lote Atual</span>
+                    <strong className="font-mono text-sm text-[var(--text-primary)] mt-0.5 block">
+                      {activeSelectedProduct.batchNumber}
+                    </strong>
+                  </div>
+                  <div className="p-3.5 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)]">
+                    <span className="text-[var(--text-muted)] block text-[11px]">Validade</span>
+                    <strong className="font-mono text-sm text-[var(--text-primary)] mt-0.5 block tabular-nums">
+                      {formatDateBR(activeSelectedProduct.expiryDate)}
+                    </strong>
+                  </div>
+                  <div className="p-3.5 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)]">
+                    <span className="text-[var(--text-muted)] block text-[11px]">Apresentação</span>
+                    <strong className="text-sm text-[var(--text-primary)] mt-0.5 block truncate">
+                      {activeSelectedProduct.presentation}
+                    </strong>
+                  </div>
+                </div>
+
+                {/* Ajuste Rápido de Estoque e Custo Unitário */}
+                <div className="p-4 rounded-2xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-primary)]">
+                        Controle Rápido de Estoque & Custo Físico
+                      </h4>
+                      <p className="text-[11px] text-[var(--text-secondary)]">
+                        Atualize o saldo de frascos no CD ou o custo de fabricação sem sair do painel.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                    <div className="flex items-end gap-2">
+                      <Input
+                        label="Saldo em Estoque (unidades)"
+                        type="number"
+                        min={0}
+                        value={quickStockValue}
+                        onChange={(e) => setQuickStockValue(Number(e.target.value))}
+                      />
+                      <Button
+                        size="md"
+                        variant="secondary"
+                        onClick={() =>
+                          handleUpdateProductQuickFields(
+                            activeSelectedProduct.id,
+                            { stockQuantity: quickStockValue },
+                            `Estoque de ${activeSelectedProduct.sku} atualizado para ${formatIntegerBR(
+                              quickStockValue
+                            )} un.`
+                          )
+                        }
+                      >
+                        Salvar estoque
+                      </Button>
+                    </div>
+
+                    <div className="flex items-end gap-2">
+                      <Input
+                        label="Custo Unitário Físico (R$)"
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        value={quickCostValue}
+                        onChange={(e) => setQuickCostValue(Number(e.target.value))}
+                      />
+                      <Button
+                        size="md"
+                        variant="secondary"
+                        onClick={() =>
+                          handleUpdateProductQuickFields(
+                            activeSelectedProduct.id,
+                            { unitCost: quickCostValue },
+                            `Custo unitário de ${activeSelectedProduct.sku} atualizado para ${formatCurrencyBRL(
+                              quickCostValue
+                            )}.`
+                          )
+                        }
+                      >
+                        Salvar custo
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Ofertas e Kits que vendem este Produto */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                      Ofertas & Kits Comerciais Vinculados a este Produto
+                    </h4>
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      icon={<Plus className="w-3.5 h-3.5" />}
+                      onClick={() => {
+                        setOfferForm({
+                          ...offerForm,
+                          productId: activeSelectedProduct.id,
+                        });
+                        setOfferModalOpen(true);
+                      }}
+                    >
+                      Criar oferta com este produto
+                    </Button>
+                  </div>
+
+                  {(() => {
+                    const productOffers = offers.filter((o) =>
+                      o.items.some((item) => item.productId === activeSelectedProduct.id)
+                    );
+                    if (productOffers.length === 0) {
+                      return (
+                        <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/40 border border-[var(--border-subtle)] text-xs text-[var(--text-muted)]">
+                          Nenhuma oferta comercial ativa vinculada a este produto no momento.
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                        {productOffers.map((off) => {
+                          const itemInOffer = off.items.find(
+                            (i) => i.productId === activeSelectedProduct.id
+                          );
+                          return (
+                            <div
+                              key={off.id}
+                              className="p-3.5 flex items-center justify-between gap-3 text-xs"
+                            >
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-[var(--text-primary)]">
+                                    {off.name}
+                                  </span>
+                                  <StatusBadge status={off.status} />
+                                </div>
+                                <div className="text-[11px] text-[var(--text-muted)] mt-0.5 font-mono">
+                                  Link: /o/{off.code} · Baixa por venda: {itemInOffer?.quantity || 1} un
+                                </div>
+                              </div>
+                              <div className="text-right font-mono shrink-0">
+                                <strong className="text-sm text-indigo-600 dark:text-indigo-400 tabular-nums">
+                                  {formatCurrencyBRL(off.promotionalPrice)}
+                                </strong>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* ABA 2: COMPOSIÇÃO, ROTULAGEM, ADVERTÊNCIAS E CLAIMS IN 28/2018 */}
+            {productDetailTab === 'ROTULO' && (
+              <div className="space-y-5 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] space-y-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                      Composição & Ingredientes
+                    </span>
+                    <p className="text-[var(--text-primary)] leading-relaxed">
+                      {activeSelectedProduct.composition || 'Não informado.'}
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] space-y-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                      Modo de Uso Recomendado
+                    </span>
+                    <p className="text-[var(--text-primary)] leading-relaxed">
+                      {activeSelectedProduct.usageInstructions || 'Não informado.'}
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] space-y-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                      Advertências Obrigatórias no Rótulo
+                    </span>
+                    <p className="text-amber-700 dark:text-amber-300 font-medium leading-relaxed">
+                      {activeSelectedProduct.warnings || 'Não informado.'}
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] space-y-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                      Restrições de Público & Rotulagem (RDC 429)
+                    </span>
+                    <p className="text-[var(--text-primary)] leading-relaxed">
+                      {activeSelectedProduct.restrictions || 'Uso adulto.'}
+                    </p>
+                    <p className="text-[11px] text-[var(--text-muted)] pt-1">
+                      {activeSelectedProduct.labelingInfo}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Alegações Funcionais Aprovadas (Claims IN 28/2018) */}
+                <div className="p-4 rounded-2xl bg-[var(--bg-subtle)]/40 border border-[var(--border-subtle)] space-y-3">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-primary)]">
+                      Alegações Funcionais Autorizadas (Claims IN 28/2018)
+                    </h4>
+                    <p className="text-[11px] text-[var(--text-secondary)]">
+                      Frases permitidas na rotulagem e nas páginas de venda deste produto.
+                    </p>
+                  </div>
+
+                  {activeSelectedProduct.approvedClaims.length === 0 ? (
+                    <p className="text-xs text-[var(--text-muted)] py-2">
+                      Nenhuma alegação funcional cadastrada para este produto.
+                    </p>
+                  ) : (
+                    <div className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                      {activeSelectedProduct.approvedClaims.map((claim) => (
+                        <div
+                          key={claim.id}
+                          className="p-3 flex items-start justify-between gap-3"
+                        >
+                          <div className="space-y-0.5">
+                            <div className="font-semibold text-[var(--text-primary)]">
+                              “{claim.claimText}”
+                            </div>
+                            <div className="text-[11px] text-[var(--text-muted)] font-mono">
+                              Base legal: {claim.regulatoryBasis}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <StatusBadge status={claim.status} />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleRemoveProductClaim(activeSelectedProduct.id, claim.id)
+                              }
+                              title="Remover alegação"
+                              className="p-1 text-[var(--text-muted)] hover:text-rose-500 cursor-pointer transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Formulário para adicionar nova alegação */}
+                  <form
+                    onSubmit={(e) => handleAddProductClaim(e, activeSelectedProduct)}
+                    className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2"
+                  >
+                    <div className="sm:col-span-2">
+                      <Input
+                        placeholder="Ex: A cafeína auxilia no aumento do estado de alerta..."
+                        value={newClaimForm.claimText}
+                        onChange={(e) =>
+                          setNewClaimForm({ ...newClaimForm, claimText: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="IN ANVISA nº 28/2018"
+                        value={newClaimForm.regulatoryBasis}
+                        onChange={(e) =>
+                          setNewClaimForm({ ...newClaimForm, regulatoryBasis: e.target.value })
+                        }
+                      />
+                      <Button type="submit" size="sm" variant="secondary">
+                        Adicionar
+                      </Button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* ABA 3: DOCUMENTOS REGULATÓRIOS, LAUDOS E STATUS DE CONFORMIDADE */}
+            {productDetailTab === 'DOCUMENTOS' && (
+              <div className="space-y-5 text-xs">
+                <div className="p-4 rounded-2xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                      Enquadramento Regulatório (ANVISA)
+                    </span>
+                    <p className="text-sm font-semibold text-[var(--text-primary)] mt-0.5">
+                      {activeSelectedProduct.regulatoryInfo}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Select
+                      value={activeSelectedProduct.complianceStatus}
+                      onChange={(e) =>
+                        handleUpdateProductQuickFields(
+                          activeSelectedProduct.id,
+                          { complianceStatus: e.target.value as ComplianceState },
+                          `Status regulatório de ${activeSelectedProduct.sku} alterado.`
+                        )
+                      }
+                      options={[
+                        { value: 'DRAFT', label: 'Rascunho' },
+                        { value: 'UNDER_REVIEW', label: 'Em revisão' },
+                        { value: 'APPROVED', label: 'Aprovado' },
+                        { value: 'REJECTED', label: 'Rejeitado' },
+                      ]}
+                    />
+                  </div>
+                </div>
+
+                {/* Lista de Documentos & Laudos Anexados */}
+                <div className="space-y-2.5">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                    Dossiê Técnico & Laudos Anexados ({activeSelectedProduct.documents.length})
+                  </h4>
+
+                  {activeSelectedProduct.documents.length === 0 ? (
+                    <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-xs">
+                      Nenhum documento ou laudo técnico anexado a este produto ainda. Utilize o formulário abaixo para anexar.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                      {activeSelectedProduct.documents.map((doc) => {
+                        const docTypeLabels: Record<ProductDocument['docType'], string> = {
+                          LAUDO_TECNICO: 'Laudo Laboratorial',
+                          NOTIFICACAO_ANVISA: 'Notificação ANVISA',
+                          FICHA_SEGURANCA: 'Ficha Técnica / Segurança',
+                          ROTULO_APROVADO: 'Arte de Rótulo Aprovado',
+                        };
+                        return (
+                          <div
+                            key={doc.id}
+                            className="p-3.5 flex items-center justify-between gap-3"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                                <FileText className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-bold text-[var(--text-primary)] truncate">
+                                  {doc.title}
+                                </div>
+                                <div className="text-[11px] text-[var(--text-muted)] flex flex-wrap items-center gap-2 mt-0.5">
+                                  <span>{docTypeLabels[doc.docType] || doc.docType}</span>
+                                  <span>·</span>
+                                  <span className="font-mono">{doc.version}</span>
+                                  <span>·</span>
+                                  <span>Anexado em {formatDateBR(doc.uploadedAt)}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <StatusBadge status={doc.status} />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleRemoveProductDocument(activeSelectedProduct.id, doc.id)
+                                }
+                                title="Remover documento"
+                                className="p-1.5 text-[var(--text-muted)] hover:text-rose-500 cursor-pointer transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Formulário real para anexar novo documento ao produto */}
+                <form
+                  onSubmit={(e) => handleAddProductDocument(e, activeSelectedProduct)}
+                  className="p-4 rounded-2xl bg-[var(--bg-subtle)]/50 border border-[var(--border-subtle)] space-y-3"
+                >
+                  <div className="font-bold text-[var(--text-primary)]">
+                    Anexar Novo Documento ou Laudo Técnico
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2">
+                      <Input
+                        label="Título do Documento / Laudo"
+                        placeholder="Ex: Laudo Microbiológico Lote LT-2026-09"
+                        value={newDocForm.title}
+                        onChange={(e) => setNewDocForm({ ...newDocForm, title: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <Select
+                      label="Tipo de Documento"
+                      value={newDocForm.docType}
+                      onChange={(e) =>
+                        setNewDocForm({
+                          ...newDocForm,
+                          docType: e.target.value as ProductDocument['docType'],
+                        })
+                      }
+                      options={[
+                        { value: 'LAUDO_TECNICO', label: 'Laudo Laboratorial' },
+                        { value: 'NOTIFICACAO_ANVISA', label: 'Notificação ANVISA' },
+                        { value: 'FICHA_SEGURANCA', label: 'Ficha Técnica / Segurança' },
+                        { value: 'ROTULO_APROVADO', label: 'Arte de Rótulo Aprovado' },
+                      ]}
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-end justify-between gap-3">
+                    <div className="w-36">
+                      <Input
+                        label="Versão"
+                        placeholder="v1.0"
+                        value={newDocForm.version}
+                        onChange={(e) => setNewDocForm({ ...newDocForm, version: e.target.value })}
+                      />
+                    </div>
+                    <Button type="submit" size="sm" icon={<Plus className="w-4 h-4" />}>
+                      Anexar ao Dossiê do Produto
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            )}
+          </div>
+        )}
+      </Drawer>
+
+      {/* ==================================================================== */}
+      {/* MODAL COMPLETO DE CADASTRO / EDIÇÃO DE PRODUTO                       */}
       {/* ==================================================================== */}
       <Modal
         open={productModalOpen}
         onClose={() => setProductModalOpen(false)}
-        title={editingProduct ? `Editar Produto ${editingProduct.sku}` : 'Novo Produto'}
+        title={editingProduct ? `Editar Produto (${editingProduct.sku})` : 'Cadastrar Novo Produto'}
+        subtitle="Preencha os dados físicos, operacionais e regulatórios do item de catálogo."
+        maxWidth="max-w-3xl"
       >
-        <form onSubmit={handleSaveProduct} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+        <form onSubmit={handleSaveProduct} className="space-y-5">
+          {/* Bloco 1: Identificação & Classificação */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+              1. Identificação no Catálogo
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Input
+                label="Código SKU"
+                placeholder="Ex: LC-LIPO-60"
+                value={prodForm.sku}
+                onChange={(e) => setProdForm({ ...prodForm, sku: e.target.value.toUpperCase() })}
+                required
+              />
+              <Select
+                label="Categoria"
+                value={prodForm.category}
+                onChange={(e) =>
+                  setProdForm({ ...prodForm, category: e.target.value as ProductCategory })
+                }
+                options={PRODUCT_CATEGORIES.map((c) => ({ value: c, label: c }))}
+              />
+              <Select
+                label="Status Inicial"
+                value={prodForm.status}
+                onChange={(e) =>
+                  setProdForm({ ...prodForm, status: e.target.value as Product['status'] })
+                }
+                options={[
+                  { value: 'ACTIVE', label: 'Ativo' },
+                  { value: 'INACTIVE', label: 'Inativo' },
+                  { value: 'ARCHIVED', label: 'Arquivado' },
+                ]}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                label="Nome Comercial (Exibido ao Cliente)"
+                placeholder="Ex: Leal LipoTherm Pro Ultra"
+                value={prodForm.commercialName}
+                onChange={(e) => setProdForm({ ...prodForm, commercialName: e.target.value })}
+                required
+              />
+              <Input
+                label="Nome Interno / Técnico"
+                placeholder="Ex: LipoTherm Cafeína + Cromo 60 caps"
+                value={prodForm.internalName}
+                onChange={(e) => setProdForm({ ...prodForm, internalName: e.target.value })}
+                required
+              />
+            </div>
+
             <Input
-              label="SKU"
-              value={prodForm.sku}
-              onChange={(e) => setProdForm({ ...prodForm, sku: e.target.value })}
-              required
-            />
-            <Select
-              label="Categoria Interna"
-              value={prodForm.category}
-              onChange={(e) =>
-                setProdForm({ ...prodForm, category: e.target.value as ProductCategory })
-              }
-              options={PRODUCT_CATEGORIES.map((c) => ({ value: c, label: c }))}
+              label="Descrição Comercial Resumida"
+              placeholder="Breve descrição da finalidade do suplemento..."
+              value={prodForm.description}
+              onChange={(e) => setProdForm({ ...prodForm, description: e.target.value })}
             />
           </div>
-          <Input
-            label="Nome Interno"
-            value={prodForm.internalName}
-            onChange={(e) => setProdForm({ ...prodForm, internalName: e.target.value })}
-            required
-          />
-          <Input
-            label="Nome Comercial"
-            value={prodForm.commercialName}
-            onChange={(e) => setProdForm({ ...prodForm, commercialName: e.target.value })}
-            required
-          />
-          <div className="grid grid-cols-3 gap-3">
-            <Input
-              label="Lote"
-              value={prodForm.batchNumber}
-              onChange={(e) => setProdForm({ ...prodForm, batchNumber: e.target.value })}
-              required
-            />
-            <Input
-              label="Validade"
-              type="date"
-              value={prodForm.expiryDate}
-              onChange={(e) => setProdForm({ ...prodForm, expiryDate: e.target.value })}
-              required
-            />
-            <Input
-              label="Custo Unitário (R$)"
-              type="number"
-              step="0.1"
-              value={prodForm.unitCost}
-              onChange={(e) => setProdForm({ ...prodForm, unitCost: Number(e.target.value) })}
-              required
-            />
+
+          {/* Bloco 2: Apresentação, Lote, Estoque e Custo Físico */}
+          <div className="space-y-3 pt-3 border-t border-[var(--border-subtle)]">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+              2. Apresentação, Lote, Estoque & Custo Físico
+            </h4>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <Input
+                label="Apresentação"
+                placeholder="Ex: Frasco 60 cápsulas"
+                value={prodForm.presentation}
+                onChange={(e) => setProdForm({ ...prodForm, presentation: e.target.value })}
+                required
+              />
+              <Input
+                label="Qtd. por Frasco (cáps/g/ml)"
+                type="number"
+                min={1}
+                value={prodForm.unitQuantity}
+                onChange={(e) =>
+                  setProdForm({ ...prodForm, unitQuantity: Number(e.target.value) })
+                }
+                required
+              />
+              <Input
+                label="Lote Vigente"
+                placeholder="Ex: LT-2026-09A"
+                value={prodForm.batchNumber}
+                onChange={(e) => setProdForm({ ...prodForm, batchNumber: e.target.value })}
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Input
+                label="Validade do Lote"
+                type="date"
+                value={prodForm.expiryDate}
+                onChange={(e) => setProdForm({ ...prodForm, expiryDate: e.target.value })}
+                required
+              />
+              <Input
+                label="Custo Unitário Físico (R$)"
+                type="number"
+                step="0.01"
+                min={0}
+                value={prodForm.unitCost}
+                onChange={(e) => setProdForm({ ...prodForm, unitCost: Number(e.target.value) })}
+                required
+              />
+              <Input
+                label="Saldo em Estoque (un)"
+                type="number"
+                min={0}
+                value={prodForm.stockQuantity}
+                onChange={(e) =>
+                  setProdForm({ ...prodForm, stockQuantity: Number(e.target.value) })
+                }
+                required
+              />
+            </div>
           </div>
-          <Input
-            label="Composição"
-            value={prodForm.composition}
-            onChange={(e) => setProdForm({ ...prodForm, composition: e.target.value })}
-          />
-          <Input
-            label="Informação Regulatória (ANVISA)"
-            value={prodForm.regulatoryInfo}
-            onChange={(e) => setProdForm({ ...prodForm, regulatoryInfo: e.target.value })}
-          />
-          <FileUploader
-            label="Anexar Documento / Laudo do Produto"
-            onUpload={(fn) => onNotify(`Arquivo ${fn} anexado ao produto!`, 'info')}
-          />
-          <div className="flex justify-end gap-2">
+
+          {/* Bloco 3: Composição, Rótulo & Regulatório */}
+          <div className="space-y-3 pt-3 border-t border-[var(--border-subtle)]">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+              3. Composição, Rotulagem & Regulatório (ANVISA)
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                label="Composição / Ingredientes"
+                placeholder="Ex: Cafeína anidra (200mg), Picolinato de Cromo..."
+                value={prodForm.composition}
+                onChange={(e) => setProdForm({ ...prodForm, composition: e.target.value })}
+              />
+              <Input
+                label="Modo de Uso Recomendado"
+                placeholder="Ex: Ingerir 2 cápsulas ao dia..."
+                value={prodForm.usageInstructions}
+                onChange={(e) => setProdForm({ ...prodForm, usageInstructions: e.target.value })}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                label="Enquadramento Regulatório (ANVISA)"
+                value={prodForm.regulatoryInfo}
+                onChange={(e) => setProdForm({ ...prodForm, regulatoryInfo: e.target.value })}
+              />
+              <Input
+                label="Restrições de Público"
+                value={prodForm.restrictions}
+                onChange={(e) => setProdForm({ ...prodForm, restrictions: e.target.value })}
+              />
+            </div>
+
+            <Input
+              label="Advertências Obrigatórias de Rotulagem"
+              value={prodForm.warnings}
+              onChange={(e) => setProdForm({ ...prodForm, warnings: e.target.value })}
+            />
+
+            <div className="space-y-2">
+              <FileUploader
+                label="Anexar Documento / Laudo Técnico ao Produto"
+                onUpload={(fn) => {
+                  const newDoc: ProductDocument = {
+                    id: `doc_${Date.now()}`,
+                    productId: editingProduct?.id || '',
+                    title: fn.replace(/\.[^/.]+$/, ''),
+                    docType: 'LAUDO_TECNICO',
+                    fileUrl: `/docs/${fn}`,
+                    version: 'v1.0',
+                    status: 'VALID',
+                    uploadedBy: user.id,
+                    uploadedAt: new Date().toISOString(),
+                  };
+                  setProdForm({
+                    ...prodForm,
+                    documents: [...(prodForm.documents || []), newDoc],
+                  });
+                  onNotify(`Documento "${fn}" preparado para vinculação ao produto.`, 'info');
+                }}
+              />
+              {prodForm.documents && prodForm.documents.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {prodForm.documents.map((d) => (
+                    <Badge key={d.id} tone="emerald">
+                      {d.title} ({d.version})
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border-subtle)]">
             <Button type="button" variant="secondary" onClick={() => setProductModalOpen(false)}>
               Cancelar
             </Button>
-            <Button type="submit">Salvar Produto</Button>
+            <Button type="submit">
+              {editingProduct ? 'Salvar Alterações' : 'Cadastrar Produto'}
+            </Button>
           </div>
         </form>
       </Modal>
